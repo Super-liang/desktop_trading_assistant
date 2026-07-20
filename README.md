@@ -1,0 +1,1 @@
+# desktop_trading_assistant
