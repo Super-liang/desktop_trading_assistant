@@ -1,0 +1,20 @@
+[package]
+name = "trading-assistant"
+version = "0.1.0"
+description = "跨平台股票盯盘助手"
+authors = ["Trading Assistant"]
+edition = "2021"
+
+[lib]
+name = "trading_assistant_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.10.1", features = ["macos-private-api", "tray-icon"] }
+tauri-plugin-global-shortcut = "2.3.1"
+tauri-plugin-window-state = "2.4.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

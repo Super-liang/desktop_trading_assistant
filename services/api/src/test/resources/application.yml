@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:trading;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+app:
+  jwt:
+    secret: test-secret-that-is-at-least-32-bytes-long
+    access-minutes: 15
+    refresh-days: 30
+  admin:
+    email: ""
+    password: ""
+  quotes:
+    stale-seconds: 15
+    tick-millis: 2000
+

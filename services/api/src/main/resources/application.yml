@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: trading-assistant-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/trading_assistant}
+    username: ${DB_USERNAME:trading}
+    password: ${DB_PASSWORD:change-me-for-production}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  jackson:
+    default-property-inclusion: non_null
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-must-be-at-least-32-bytes-long}
+    access-minutes: 15
+    refresh-days: 30
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+  quotes:
+    stale-seconds: 15
+    tick-millis: 2000
+    http:
+      enabled: ${QUOTE_HTTP_ENABLED:false}
+      base-url: ${QUOTE_HTTP_BASE_URL:}
+      api-key: ${QUOTE_HTTP_API_KEY:}
+      priority: ${QUOTE_HTTP_PRIORITY:10}
+logging:
+  level:
+    com.tradingassistant: INFO

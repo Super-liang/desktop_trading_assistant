@@ -1,0 +1,43 @@
+<h2>小窗缩放时，内部信息应该怎样变化？</h2>
+<p class="subtitle">下面三种都能随窗口变化，但阅读体验不同。点击你偏好的方案。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#eef1f4;color:#15191d">
+      <div style="font-size:12px;margin-bottom:12px">宽窗口：贵州茅台　1450.00　持仓100　+¥5,000</div>
+      <div style="font-size:7px;width:58%;white-space:nowrap">窄窗口：贵州茅台　1450.00　持仓100　+¥5,000</div>
+    </div>
+    <div class="card-body">
+      <h3>A · 整体等比缩放</h3>
+      <p>所有文字、间距和列一起变小或变大。信息结构不变，但窗口较小时文字会很小。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#eef1f4;color:#15191d">
+      <div style="font-size:12px;margin-bottom:12px">宽窗口：贵州茅台　1450.00　持仓100　+¥5,000</div>
+      <div style="font-size:11px;width:58%">
+        <strong>贵州茅台　1450.00</strong><br>
+        持仓100　+¥5,000
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · 响应式重排</h3>
+      <p>宽窗口保持表格，窄窗口改为两行或卡片。文字更易读，但布局会发生明显变化。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#eef1f4;color:#15191d">
+      <div style="font-size:12px;margin-bottom:12px">宽窗口：贵州茅台　1450.00　持仓100　+¥5,000</div>
+      <div style="font-size:9px;width:58%">
+        <strong>贵州茅台　1450.00　+¥5,000</strong><br>
+        持仓100 · 成本1400
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · 混合自适应（推荐）</h3>
+      <p>字体和间距平滑缩放；空间不足时再把次要信息换行。兼顾信息密度、可读性和窗口连续缩放。</p>
+    </div>
+  </div>
+</div>

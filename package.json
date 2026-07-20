@@ -1,0 +1,15 @@
+{
+  "name": "desktop-trading-assistant",
+  "private": true,
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev:desktop": "npm --workspace apps/desktop run dev",
+    "test:desktop": "npm --workspace apps/desktop test",
+    "build:desktop": "npm --workspace apps/desktop run build",
+    "tauri:dev": "npm --workspace apps/desktop run tauri dev",
+    "tauri:build": "npm --workspace apps/desktop run tauri build"
+  }
+}
+
