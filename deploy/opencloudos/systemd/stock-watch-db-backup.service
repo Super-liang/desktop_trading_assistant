@@ -1,0 +1,15 @@
+[Unit]
+Description=备份股票盯盘助手 PostgreSQL 数据库
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/stock-watch/api.env
+ExecStart=/usr/local/libexec/stock-watch/backup-postgres.sh
+UMask=0077
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/stock-watch

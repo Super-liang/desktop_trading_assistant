@@ -63,3 +63,27 @@ export type AdminUser = {
   lastLoginAt?: string;
 };
 
+export type MarketDataConfig = {
+  provider: "AKSHARE";
+  mode: "MARKET_SNAPSHOT" | "SINGLE_STOCK";
+  snapshotSource: "EASTMONEY" | "SINA";
+  singleSource: "EASTMONEY" | "XUEQIU";
+  refreshSeconds: number;
+  updatedAt: string;
+  providers: Array<{ id: string; name: string; modes: string[] }>;
+};
+
+export type MarketDataComponentStatus = {
+  id: "AKSHARE_GATEWAY" | "REDIS_SNAPSHOT" | "UPSTREAM";
+  label: string;
+  status: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN" | "NOT_APPLICABLE";
+  lastSuccessAt?: string;
+  ageSeconds?: number;
+  detail?: string;
+};
+
+export type MarketDataStatus = {
+  mode: "MARKET_SNAPSHOT" | "SINGLE_STOCK";
+  components: MarketDataComponentStatus[];
+  checkedAt: string;
+};

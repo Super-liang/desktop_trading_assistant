@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +49,21 @@ class AuthFlowTest {
 
         mvc.perform(get("/api/v1/admin/users")
                         .header("Authorization", "Bearer " + login.get("accessToken").asText()))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(get("/api/v1/market-data/config")
+                        .header("Authorization", "Bearer " + login.get("accessToken").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provider").value("AKSHARE"));
+
+        mvc.perform(put("/api/v1/admin/market-data/config")
+                        .header("Authorization", "Bearer " + login.get("accessToken").asText())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"provider":"AKSHARE","mode":"SINGLE_STOCK",
+                                 "snapshotSource":"EASTMONEY","singleSource":"XUEQIU",
+                                 "refreshSeconds":10}
+                                """))
                 .andExpect(status().isForbidden());
     }
 

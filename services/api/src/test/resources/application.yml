@@ -8,6 +8,10 @@ spring:
       ddl-auto: create-drop
   flyway:
     enabled: false
+  data:
+    redis:
+      repositories:
+        enabled: false
 app:
   jwt:
     secret: test-secret-that-is-at-least-32-bytes-long
@@ -19,4 +23,6 @@ app:
   quotes:
     stale-seconds: 15
     tick-millis: 2000
-
+    demo-enabled: false
+  market-data:
+    scheduler-enabled: false

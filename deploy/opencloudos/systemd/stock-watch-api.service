@@ -1,0 +1,33 @@
+[Unit]
+Description=股票盯盘助手 Spring API
+After=network-online.target redis.service stock-watch-akshare.service
+Wants=network-online.target
+Requires=redis.service stock-watch-akshare.service
+
+[Service]
+Type=simple
+User=stockwatch
+Group=stockwatch
+EnvironmentFile=/etc/stock-watch/api.env
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -Djava.security.egd=file:/dev/urandom -jar /opt/stock-watch/current/api/app.jar
+WorkingDirectory=/opt/stock-watch/current/api
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=30s
+SuccessExitStatus=143
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

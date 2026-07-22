@@ -1,0 +1,81 @@
+name: Desktop installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: HTTPS API URL embedded in desktop installers
+        required: true
+        default: https://211.159.158.165
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  VITE_API_URL: ${{ inputs.api_url }}
+
+jobs:
+  macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - run: npm ci
+      - name: Build macOS DMG and APP archive
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: deploy/desktop/build-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StockTradingAssistant-macos-arm64
+          path: build/installers/*/macos-arm64/*
+          if-no-files-found: error
+
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - run: npm ci
+      - name: Build Windows NSIS and MSI installers
+        run: npm --workspace apps/desktop run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis,msi
+      - name: Verify cloud API in frontend
+        shell: bash
+        run: deploy/desktop/verify-frontend-api.sh apps/desktop/dist "${VITE_API_URL}"
+      - name: Archive and hash Windows installers
+        shell: pwsh
+        run: |
+          $version = node -p "require('./apps/desktop/package.json').version"
+          $output = "build/installers/$version/windows-x64"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $bundle = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $exe = Get-ChildItem "$bundle/nsis/*setup.exe" | Select-Object -First 1
+          $msi = Get-ChildItem "$bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $exe -or -not $msi) { throw "Tauri did not produce both NSIS and MSI installers" }
+          $exeOut = "$output/StockTradingAssistant_${version}_windows-x64-setup.exe"
+          $msiOut = "$output/StockTradingAssistant_${version}_windows-x64.msi"
+          Copy-Item $exe.FullName $exeOut
+          Copy-Item $msi.FullName $msiOut
+          $lines = @($exeOut, $msiOut) | ForEach-Object {
+            $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path $_ -Leaf)"
+          }
+          $lines | Set-Content "$output/SHA256SUMS.txt" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StockTradingAssistant-windows-x64
+          path: build/installers/*/windows-x64/*
+          if-no-files-found: error

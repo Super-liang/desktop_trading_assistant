@@ -13,6 +13,14 @@ spring:
     enabled: true
   jackson:
     default-property-inclusion: non_null
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      repositories:
+        enabled: false
 server:
   port: ${PORT:8080}
   error:
@@ -36,11 +44,15 @@ app:
   quotes:
     stale-seconds: 15
     tick-millis: 2000
+    demo-enabled: ${QUOTE_DEMO_ENABLED:false}
     http:
       enabled: ${QUOTE_HTTP_ENABLED:false}
       base-url: ${QUOTE_HTTP_BASE_URL:}
       api-key: ${QUOTE_HTTP_API_KEY:}
       priority: ${QUOTE_HTTP_PRIORITY:10}
+  market-data:
+    scheduler-enabled: ${MARKET_DATA_SCHEDULER_ENABLED:true}
+    snapshot-max-stale-seconds: ${MARKET_DATA_SNAPSHOT_MAX_STALE_SECONDS:86400}
 logging:
   level:
     com.tradingassistant: INFO

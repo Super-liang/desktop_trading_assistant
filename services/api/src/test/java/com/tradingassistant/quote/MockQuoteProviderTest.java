@@ -12,7 +12,7 @@ class MockQuoteProviderTest {
     @Test
     void returnsTraceableDemoQuote() {
         var provider = new MockQuoteProvider(new AppProperties(
-                null, null, new AppProperties.Quotes(15, 2000)));
+                null, null, quotesProperties()));
         Quote quote = provider.snapshots(List.of(InstrumentId.parse("600000"))).get(0);
         assertThat(quote.source()).isEqualTo("DEMO");
         assertThat(quote.demo()).isTrue();
@@ -23,7 +23,7 @@ class MockQuoteProviderTest {
     @Test
     void fallsBackAfterProviderFailureAndMarksOldQuoteStale() {
         AppProperties properties = new AppProperties(
-                null, null, new AppProperties.Quotes(15, 2000));
+                null, null, quotesProperties());
         QuoteProvider failing = new StubProvider("PRIMARY", 1, true) {
             @Override public List<Quote> snapshots(List<InstrumentId> instruments) {
                 throw new IllegalStateException("provider unavailable");
@@ -49,7 +49,7 @@ class MockQuoteProviderTest {
     @Test
     void emptyRequestDoesNotCallProviderAndPartialResponseFallsBack() {
         AppProperties properties = new AppProperties(
-                null, null, new AppProperties.Quotes(15, 2000));
+                null, null, quotesProperties());
         QuoteProvider partial = new StubProvider("PARTIAL", 1, true);
         QuoteProvider complete = new MockQuoteProvider(properties);
         QuoteProviderRegistry registry = new QuoteProviderRegistry(
@@ -76,5 +76,10 @@ class MockQuoteProviderTest {
         }
         @Override public List<InstrumentSearchResult> search(String query) { return List.of(); }
         @Override public List<Quote> snapshots(List<InstrumentId> instruments) { return List.of(); }
+    }
+
+    private static AppProperties.Quotes quotesProperties() {
+        return new AppProperties.Quotes(15, 2000,
+                new AppProperties.Quotes.HttpProvider(false, "", "", 10));
     }
 }

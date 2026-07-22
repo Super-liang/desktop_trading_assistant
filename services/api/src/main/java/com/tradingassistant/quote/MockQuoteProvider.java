@@ -7,9 +7,11 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.*;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "app.quotes.demo-enabled", havingValue = "true")
 public class MockQuoteProvider implements QuoteProvider {
     private static final ZoneId CHINA = ZoneId.of("Asia/Shanghai");
     private static final List<Seed> SEEDS = List.of(
@@ -84,4 +86,3 @@ public class MockQuoteProvider implements QuoteProvider {
 
     private record Seed(String id, String name, String base) {}
 }
-

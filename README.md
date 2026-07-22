@@ -1,6 +1,6 @@
 # 股票盯盘助手
 
-面向个人用户的 Windows/macOS 极简盯盘应用。当前一期实现注册登录、用户后台、A 股自选与手工持仓、实时盈亏、透明置顶小窗、托盘和全局老板键；行情默认使用明确标识的可复现 `DEMO` Provider，也可在本地非商业研究环境接入 AKShare 公开行情。
+面向个人用户的 Windows/macOS 极简盯盘应用。当前一期实现注册登录、用户后台、A 股自选与手工持仓、实时盈亏、透明置顶小窗、托盘和全局老板键；真实行情通过可配置的 AKShare 研究网关接入，生产配置禁止启用 `DEMO` Provider。
 
 > 当前演示行情不是真实交易所行情，不构成任何投资建议。正式商用前必须取得沪深行情 PC 展示及终端分发授权。
 
@@ -9,7 +9,7 @@
 - Tauri 2 原生壳：Windows/macOS、透明无边框置顶小窗、托盘、`Cmd/Ctrl + Shift + H` 老板键。
 - React 工作台：注册登录、自选搜索、持仓数量/成本、实时市值/浮盈亏、管理员用户启停。
 - Spring Boot API：Java 17、JWT、刷新令牌轮换、BCrypt、RBAC、账号注销、审计。
-- 行情网关：`QuoteProvider` SPI、Provider 健康/能力、A 股代码规范化、快照、SSE、DEMO 数据源与可选 AKShare HTTP 网关。
+- 行情网关：`QuoteProvider` SPI、Provider 健康/能力、A 股代码规范化、Redis 全市场快照、单股查询、SSE 与 AKShare HTTP 网关。
 - PostgreSQL + Flyway、Docker Compose、后端/前端测试与 Win/macOS CI 编译配置。
 
 ## 目录
@@ -60,6 +60,12 @@ npm run tauri:dev
 ```
 
 API 健康检查：`http://localhost:8080/actuator/health`。
+
+## OpenCloudOS 云服务器部署
+
+OpenCloudOS 9.6 单机部署使用现有宝塔 Nginx + systemd，复用现有宿主机 PostgreSQL，并支持无域名的 Let’s Encrypt 短期 IP 证书。完整预检、影响范围、备份、发布、回滚和验收步骤见 [OpenCloudOS 云端部署手册](docs/cloud-deployment-opencloudos.md)。
+
+服务器托管的是 Web 前端、Spring API 和 AKShare 网关；Tauri 透明小窗、老板键和托盘仍在用户本机运行。
 
 ## macOS 无 Docker 接入 AKShare 真实公开行情
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, EyeOff, LogOut, Plus, Settings, Shield, Sparkles, UserX } from "lucide-react";
+import { Activity, Database, EyeOff, LogOut, Plus, Settings, Shield, Sparkles, UserX } from "lucide-react";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { money } from "../lib/format";
@@ -9,6 +9,8 @@ import { AddPositionDialog } from "./AddPositionDialog";
 import { PortfolioTable } from "./PortfolioTable";
 import { AdminPanel } from "./AdminPanel";
 import { EditPositionDialog } from "./EditPositionDialog";
+import { MarketDataSettings } from "./MarketDataSettings";
+import { MarketStatusLights } from "./MarketStatusLights";
 import type { PortfolioItem } from "../types";
 
 async function toggleTicker() {
@@ -43,6 +45,7 @@ export function Dashboard() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<PortfolioItem | null>(null);
   const [admin, setAdmin] = useState(false);
+  const [marketDataSettings, setMarketDataSettings] = useState(false);
   const portfolio = useQuery({
     queryKey: ["portfolio"],
     queryFn: api.portfolio,
@@ -83,6 +86,8 @@ export function Dashboard() {
   }
 
   if (admin) return <AdminPanel onBack={() => setAdmin(false)} />;
+  if (marketDataSettings) return <MarketDataSettings isAdmin={session.role === "ADMIN"}
+    onBack={() => setMarketDataSettings(false)} />;
   const data = portfolio.data;
   const quoteSource = summarizeQuoteSource(data?.items ?? [], portfolio.isError);
   return (
@@ -92,6 +97,7 @@ export function Dashboard() {
         <nav>
           <button className="active"><Activity size={18} /> 盯盘工作台</button>
           <button onClick={toggleTicker}><EyeOff size={18} /> 透明小窗</button>
+          <button onClick={() => setMarketDataSettings(true)}><Database size={18} /> 实时行情源</button>
           {session.role === "ADMIN" && <button onClick={() => setAdmin(true)}><Shield size={18} /> 用户管理</button>}
           <button disabled><Settings size={18} /> 个性设置 <span className="phase">二期</span></button>
           <button disabled><Sparkles size={18} /> AI 分析 <span className="phase">三期</span></button>
@@ -112,6 +118,7 @@ export function Dashboard() {
         </header>
         <div className="demo-banner"><span>{quoteSource.badge}</span>
           {quoteSource.notice}</div>
+        <MarketStatusLights />
         <section className="summary-grid">
           <article className="summary-card featured"><small>持仓总市值</small>
             <strong>¥ {money(data?.totalMarketValue ?? 0)}</strong><span>{quoteSource.estimate}</span></article>

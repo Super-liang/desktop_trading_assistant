@@ -53,7 +53,7 @@ export function summarizeQuoteSource(
 
   const source = sources[0];
   const delayed = quotes.some((quote) => quote.delayed);
-  if (source === "AKSHARE") {
+  if (source.startsWith("AKSHARE")) {
     return {
       badge: source,
       notice: `AKShare 公开${delayed ? "延迟" : ""}行情 · 仅供非商业研究参考 · 不构成投资建议`,

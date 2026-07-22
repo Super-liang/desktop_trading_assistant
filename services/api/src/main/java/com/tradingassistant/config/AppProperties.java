@@ -10,7 +10,7 @@ public record AppProperties(
 ) {
     public AppProperties {
         if (quotes == null) {
-            quotes = new Quotes(15, 2000);
+            quotes = new Quotes(15, 2000, new Quotes.HttpProvider(false, "", "", 10));
         }
     }
     public record Jwt(String secret, long accessMinutes, long refreshDays) {}
@@ -20,9 +20,6 @@ public record AppProperties(
             if (http == null) {
                 http = new HttpProvider(false, "", "", 10);
             }
-        }
-        public Quotes(long staleSeconds, long tickMillis) {
-            this(staleSeconds, tickMillis, new HttpProvider(false, "", "", 10));
         }
         public record HttpProvider(boolean enabled, String baseUrl, String apiKey, int priority) {}
     }

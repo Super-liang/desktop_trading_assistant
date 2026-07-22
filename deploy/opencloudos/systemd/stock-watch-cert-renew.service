@@ -1,0 +1,10 @@
+[Unit]
+Description=续期股票盯盘助手 Let’s Encrypt IP 短证书
+After=network-online.target nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/stock-watch/certbot/bin/certbot renew --quiet --deploy-hook "/usr/bin/nginx -s reload"
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true

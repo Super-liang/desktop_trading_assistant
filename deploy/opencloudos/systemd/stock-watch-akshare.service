@@ -1,0 +1,31 @@
+[Unit]
+Description=股票盯盘助手 AKShare 行情网关（非商业研究）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stockwatch
+Group=stockwatch
+EnvironmentFile=/etc/stock-watch/akshare.env
+ExecStart=/opt/stock-watch/current/venv/bin/python -m uvicorn akshare_gateway.app:create_app --factory --host 127.0.0.1 --port 8090 --workers 1 --no-access-log
+WorkingDirectory=/opt/stock-watch/current/akshare
+Restart=on-failure
+RestartSec=8s
+TimeoutStartSec=60s
+TimeoutStopSec=20s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

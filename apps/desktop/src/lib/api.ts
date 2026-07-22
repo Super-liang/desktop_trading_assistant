@@ -1,4 +1,6 @@
-import type { AdminUser, AuthResponse, PortfolioSummary, SearchResult } from "../types";
+import type {
+  AdminUser, AuthResponse, MarketDataConfig, MarketDataStatus, PortfolioSummary, SearchResult,
+} from "../types";
 import { useAuth } from "../store/auth";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
@@ -72,4 +74,11 @@ export const api = {
       method: "PATCH", body: JSON.stringify({ status }),
     }),
   audits: () => request<{ content: Array<Record<string, string>> }>("/api/v1/admin/audits"),
+  marketDataConfig: () => request<MarketDataConfig>("/api/v1/market-data/config"),
+  updateMarketDataConfig: (body: Pick<MarketDataConfig,
+    "provider" | "mode" | "snapshotSource" | "singleSource" | "refreshSeconds">) =>
+    request<MarketDataConfig>("/api/v1/admin/market-data/config", {
+      method: "PUT", body: JSON.stringify(body),
+    }),
+  marketDataStatus: () => request<MarketDataStatus>("/api/v1/market-data/status"),
 };

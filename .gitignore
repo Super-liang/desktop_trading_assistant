@@ -10,6 +10,7 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 *.log
 data/
+build/
 .venv/
 __pycache__/
 .pytest_cache/

@@ -1,0 +1,55 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 2s
+      repositories:
+        enabled: false
+
+server:
+  address: ${BIND_ADDRESS:127.0.0.1}
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-minutes: ${JWT_ACCESS_MINUTES:15}
+    refresh-days: ${JWT_REFRESH_DAYS:30}
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+  quotes:
+    stale-seconds: ${QUOTE_STALE_SECONDS:30}
+    tick-millis: ${QUOTE_TICK_MILLIS:2000}
+    demo-enabled: ${QUOTE_DEMO_ENABLED:false}
+    http:
+      enabled: ${QUOTE_HTTP_ENABLED:true}
+      base-url: ${QUOTE_HTTP_BASE_URL:http://127.0.0.1:8090}
+      api-key: ${QUOTE_HTTP_API_KEY}
+      priority: ${QUOTE_HTTP_PRIORITY:10}
+  market-data:
+    scheduler-enabled: ${MARKET_DATA_SCHEDULER_ENABLED:true}
+    snapshot-max-stale-seconds: ${MARKET_DATA_SNAPSHOT_MAX_STALE_SECONDS:86400}

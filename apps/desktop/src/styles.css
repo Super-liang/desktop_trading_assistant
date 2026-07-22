@@ -82,6 +82,36 @@ input:focus { border-color:#6d8c4f;box-shadow:0 0 0 3px #b9e56a33; }
 .admin-audit-title + .admin-table { border-radius:0 0 9px 9px; }
 .admin-row.audit-row { grid-template-columns:1.3fr 1.5fr .7fr 1fr; }
 .secondary-button { border:1px solid #3b4944;background:transparent;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px; }
+.source-lights { display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 18px; }
+.source-lights.compact { justify-content:flex-end;margin:0; }
+.source-light { min-width:150px;display:flex;align-items:center;gap:9px;background:#111b19;border:1px solid var(--line);border-radius:8px;padding:10px 12px; }
+.source-light i { width:9px;height:9px;border-radius:50%;background:#75817d;box-shadow:0 0 8px #75817d66; }
+.source-light span { display:flex;flex-direction:column;gap:2px; }.source-light strong { font-size:11px; }.source-light small { color:#76837e;font-size:9px; }
+.source-light.up i { background:var(--lime);box-shadow:0 0 10px var(--lime); }
+.source-light.degraded i { background:#f0b85b;box-shadow:0 0 10px #f0b85b; }
+.source-light.down i,.source-light.down-state i { background:#ff5b64;box-shadow:0 0 10px #ff5b64; }
+.source-light.not_applicable { opacity:.55; }
+.source-settings-page { min-height:100vh;background:#0b1211;padding:38px 46px; }
+.source-settings-page>header { display:flex;align-items:center;gap:15px;margin-bottom:28px; }
+.source-settings-page h1 { font-size:34px;margin:0; }.source-settings-page header p:last-child { color:#788580;font-size:12px;margin:6px 0 0; }
+.source-settings-layout { display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;max-width:1250px; }
+.provider-list,.source-config-panel { background:#101917;border:1px solid var(--line);border-radius:11px; }
+.provider-list { padding:18px; }.provider-list>button { width:100%;border:1px solid #3b503d;background:#1b2924;color:#eef3f0;border-radius:8px;padding:12px;display:flex;align-items:center;gap:10px;text-align:left; }
+.provider-list button span { display:flex;flex-direction:column;gap:3px; }.provider-list button small,.provider-coming { color:#75827e;font-size:10px; }
+.provider-coming { margin-top:18px;line-height:1.6; }.source-config-panel { padding:22px; }
+.source-panel-head { display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:20px; }
+.source-panel-head h2 { margin:0;font-size:23px; }.source-panel-head p,.source-form-section p { color:#7c8984;font-size:11px;margin:7px 0 0; }
+.mode-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0; }
+.mode-grid button { min-height:120px;background:#121d1a;border:1px solid var(--line);color:#8f9b97;border-radius:9px;padding:18px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;cursor:pointer; }
+.mode-grid button.selected { border-color:#82a34e;background:#1e2c22;color:#eef3ee;box-shadow:inset 0 0 0 1px #82a34e44; }
+.mode-grid button:disabled { cursor:default; }.mode-grid button span { color:#7c8984;font-size:11px; }
+.source-form-section { background:#0d1614;border:1px solid var(--line);border-radius:9px;padding:20px; }
+.source-form-section h3 { margin:0;font-size:16px; }.source-options { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px; }
+.source-options label { margin:0;display:flex;flex-direction:row;align-items:center;background:#141f1c;border:1px solid #293632;border-radius:8px;padding:13px;cursor:pointer; }
+.source-options input { width:auto;accent-color:#b5ec54; }.source-options span { display:flex;flex-direction:column;gap:4px; }.source-options small { color:#71807a;font-size:9px; }
+.refresh-field { max-width:300px;margin-top:18px; }.refresh-field input { padding:10px 12px; }.refresh-field small { color:#71807a;font-weight:400; }
+.source-save-row { min-height:42px;display:flex;justify-content:flex-end;align-items:center;gap:16px;margin-top:18px;font-size:12px; }
+@media(max-width:900px){.source-settings-layout{grid-template-columns:1fr}.provider-list{display:none}.source-panel-head{flex-direction:column}.source-lights.compact{justify-content:flex-start}.mode-grid,.source-options{grid-template-columns:1fr}}
 .ticker-window {
   --ticker-text-opacity: 1;
   --ticker-ui-scale: 1;

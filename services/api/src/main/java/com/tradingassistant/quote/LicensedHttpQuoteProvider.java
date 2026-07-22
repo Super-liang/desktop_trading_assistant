@@ -15,7 +15,7 @@ import org.springframework.web.client.RestClient;
  * API Key 只进入请求头且不写日志；异常由 Registry 在单次调用内自动降级。
  */
 @Component
-@ConditionalOnProperty(name = "app.quotes.http.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.quotes.legacy-http-enabled", havingValue = "true")
 public class LicensedHttpQuoteProvider implements QuoteProvider {
     private final RestClient client;
     private final int priority;

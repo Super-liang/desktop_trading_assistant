@@ -27,6 +27,15 @@ vi.mock("../lib/api", () => ({
     portfolio: vi.fn().mockResolvedValue({
       items: [], totalMarketValue: 0, totalProfit: 0, calculationNotice: "测试",
     }),
+    marketDataStatus: vi.fn().mockResolvedValue({
+      mode: "MARKET_SNAPSHOT",
+      checkedAt: "2026-07-22T01:00:00Z",
+      components: [
+        { id: "AKSHARE_GATEWAY", label: "AKShare 网关", status: "UP", detail: "UP" },
+        { id: "REDIS_SNAPSHOT", label: "Redis 快照", status: "UP", ageSeconds: 3 },
+        { id: "UPSTREAM", label: "SNAPSHOT_EASTMONEY", status: "UP", detail: "120 ms" },
+      ],
+    }),
   },
 }));
 
@@ -118,5 +127,14 @@ describe("Dashboard", () => {
 
     await waitFor(() => expect(native.getByLabel).toHaveBeenCalledWith("ticker"));
     expect(screen.getByRole("heading", { name: "我的盯盘" })).toBeInTheDocument();
+  });
+
+  it("展示各行情链路的独立联通指示", async () => {
+    renderDashboard();
+
+    expect(await screen.findByText("AKShare 网关")).toBeInTheDocument();
+    expect(screen.getByText("Redis 快照")).toBeInTheDocument();
+    expect(screen.getByText("SNAPSHOT_EASTMONEY")).toBeInTheDocument();
+    expect(screen.queryByText("DEMO")).not.toBeInTheDocument();
   });
 });

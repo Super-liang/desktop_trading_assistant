@@ -1,0 +1,10 @@
+[Unit]
+Description=每天备份股票盯盘助手 PostgreSQL 数据库
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=20m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

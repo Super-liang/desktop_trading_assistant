@@ -8,8 +8,11 @@
     "dev:desktop": "npm --workspace apps/desktop run dev",
     "test:desktop": "npm --workspace apps/desktop test",
     "build:desktop": "npm --workspace apps/desktop run build",
+    "build:web:cloud": "VITE_API_URL='' npm --workspace apps/desktop run build",
     "tauri:dev": "npm --workspace apps/desktop run tauri dev",
-    "tauri:build": "npm --workspace apps/desktop run tauri build"
+    "tauri:build": "npm --workspace apps/desktop run tauri build",
+    "release:mac": "deploy/desktop/build-macos.sh",
+    "release:windows:cross": "deploy/desktop/build-windows-cross.sh",
+    "test:installers": "deploy/tests/test-desktop-installers.sh"
   }
 }
-

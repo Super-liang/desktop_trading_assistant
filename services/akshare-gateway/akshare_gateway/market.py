@@ -38,6 +38,18 @@ def exchange_for(code: str) -> str:
     raise InvalidMarketData("不支持的 A 股代码")
 
 
+def normalize_code(value: Any) -> str:
+    """统一 AKShare 在不同 DataFrame 类型中返回的证券代码。"""
+    code = str(value).strip().lower()
+    if code.startswith(("sh", "sz", "bj")):
+        code = code[2:]
+    if code.endswith(".0") and code[:-2].isdigit():
+        code = code[:-2]
+    code = code.zfill(6)
+    exchange_for(code)
+    return code
+
+
 def asset_type_for(code: str) -> str:
     return "ETF" if code.startswith(("1", "5")) else "STOCK"
 
@@ -71,7 +83,7 @@ def _number(value: Any) -> float:
 
 
 def build_market_snapshot(
-    frame: pd.DataFrame, fetched_at: datetime
+    frame: pd.DataFrame, fetched_at: datetime, source: str = "AKSHARE"
 ) -> dict[str, dict[str, Any]]:
     missing = REQUIRED_COLUMNS.difference(frame.columns)
     if missing:
@@ -83,10 +95,7 @@ def build_market_snapshot(
     quotes: dict[str, dict[str, Any]] = {}
     for row in frame.to_dict(orient="records"):
         try:
-            code = str(row["代码"]).strip().lower()
-            if code.startswith(("sh", "sz", "bj")):
-                code = code[2:]
-            code = code.zfill(6)
+            code = normalize_code(row["代码"])
             exchange = exchange_for(code)
             last = _number(row["最新价"])
             if last <= 0:
@@ -98,6 +107,9 @@ def build_market_snapshot(
             change = _number(row["涨跌额"])
             change_percent = _number(row["涨跌幅"])
             volume = _number(row["成交量"])
+            if "EASTMONEY" in source:
+                # stock_zh_a_spot_em 的成交量单位为“手”，统一 Quote 使用“股”。
+                volume *= 100
             if previous_close <= 0 or min(open_price, high, low, volume) < 0:
                 continue
         except InvalidMarketData:
@@ -117,7 +129,7 @@ def build_market_snapshot(
             "changePercent": change_percent,
             "volume": volume,
             "marketPhase": phase,
-            "source": "AKSHARE",
+            "source": source,
             "sourceTimestamp": fetched_at,
             "receivedAt": fetched_at,
             "delayed": True,
@@ -127,3 +139,58 @@ def build_market_snapshot(
     if not quotes:
         raise InvalidMarketData("AKShare 行情没有可用证券")
     return quotes
+
+
+def build_single_quote(
+    frame: pd.DataFrame, instrument_id: str, fetched_at: datetime, source: str
+) -> dict[str, Any]:
+    """把 AKShare 的 item/value 单股结果转换为统一 Quote。"""
+    if fetched_at.tzinfo is None:
+        raise ValueError("fetched_at 必须包含时区")
+    if not {"item", "value"}.issubset(frame.columns):
+        raise InvalidMarketData("AKShare 单股行情缺少 item/value 字段")
+    exchange, code = instrument_id.split(":", 1)
+    if exchange_for(code) != exchange:
+        raise InvalidMarketData("证券交易所与代码不匹配")
+    values = {
+        str(row["item"]).strip(): row["value"]
+        for row in frame.to_dict(orient="records")
+    }
+
+    def first_number(*names: str) -> float:
+        for name in names:
+            if name in values and values[name] not in (None, "", "-"):
+                return _number(values[name])
+        raise InvalidMarketData(f"AKShare 单股行情缺少字段: {'/'.join(names)}")
+
+    last = first_number("最新", "现价", "最新价", "current")
+    previous_close = first_number("昨收", "昨收价", "last_close")
+    if last <= 0 or previous_close <= 0:
+        raise InvalidMarketData("AKShare 单股行情价格无效")
+    change = first_number("涨跌", "涨跌额", "chg") if any(
+        name in values for name in ("涨跌", "涨跌额", "chg")
+    ) else last - previous_close
+    change_percent = first_number("涨幅", "涨跌幅", "percent") if any(
+        name in values for name in ("涨幅", "涨跌幅", "percent")
+    ) else change * 100 / previous_close
+    name = str(values.get("名称") or values.get("name") or code).strip()
+    return {
+        "instrumentId": instrument_id,
+        "name": name,
+        "last": last,
+        "previousClose": previous_close,
+        "open": first_number("今开", "开盘", "open"),
+        "high": first_number("最高", "high"),
+        "low": first_number("最低", "low"),
+        "change": change,
+        "changePercent": change_percent,
+        "volume": first_number("成交量", "总手", "volume")
+        * (100 if "EASTMONEY" in source and "总手" in values else 1),
+        "marketPhase": market_phase(fetched_at),
+        "source": source,
+        "sourceTimestamp": fetched_at,
+        "receivedAt": fetched_at,
+        "delayed": True,
+        "stale": False,
+        "demo": False,
+    }

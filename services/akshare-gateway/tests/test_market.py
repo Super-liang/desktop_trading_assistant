@@ -3,7 +3,12 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from akshare_gateway.market import InvalidMarketData, build_market_snapshot, market_phase
+from akshare_gateway.market import (
+    InvalidMarketData,
+    build_market_snapshot,
+    build_single_quote,
+    market_phase,
+)
 
 
 def test_builds_traceable_quotes_for_shenzhen_shanghai_and_beijing(
@@ -24,6 +29,11 @@ def test_builds_traceable_quotes_for_shenzhen_shanghai_and_beijing(
     assert sh["demo"] is False
     assert snapshot["SZSE:000001"]["instrumentId"] == "SZSE:000001"
     assert snapshot["BSE:920001"]["instrumentId"] == "BSE:920001"
+
+    eastmoney = build_market_snapshot(
+        market_frame, fetched_at, "AKSHARE_EASTMONEY_SNAPSHOT"
+    )
+    assert eastmoney["SSE:600519"]["volume"] == sh["volume"] * 100
 
 
 def test_accepts_prefixed_codes_from_sina(
@@ -52,6 +62,62 @@ def test_skips_rows_with_non_positive_or_missing_price(
     snapshot = build_market_snapshot(market_frame, fetched_at)
 
     assert set(snapshot) == {"BSE:920001"}
+
+
+def test_builds_eastmoney_single_quote(fetched_at: datetime) -> None:
+    frame = pd.DataFrame(
+        [
+            {"item": "最新", "value": 10.45},
+            {"item": "昨收", "value": 10.40},
+            {"item": "今开", "value": 10.38},
+            {"item": "最高", "value": 10.47},
+            {"item": "最低", "value": 10.37},
+            {"item": "涨跌", "value": 0.05},
+            {"item": "涨幅", "value": 0.48},
+            {"item": "总手", "value": 872663},
+        ]
+    )
+
+    quote = build_single_quote(
+        frame, "SZSE:000001", fetched_at, "AKSHARE_EASTMONEY_SINGLE"
+    )
+
+    assert quote["last"] == 10.45
+    assert quote["name"] == "000001"
+    assert quote["source"] == "AKSHARE_EASTMONEY_SINGLE"
+    assert quote["volume"] == 87266300
+    assert quote["demo"] is False
+
+
+def test_builds_xueqiu_single_quote(fetched_at: datetime) -> None:
+    frame = pd.DataFrame(
+        [
+            {"item": "名称", "value": "浦发银行"},
+            {"item": "现价", "value": 10.2},
+            {"item": "昨收", "value": 9.65},
+            {"item": "今开", "value": 9.8},
+            {"item": "最高", "value": 10.29},
+            {"item": "最低", "value": 9.75},
+            {"item": "涨跌", "value": 0.55},
+            {"item": "涨幅", "value": 5.7},
+            {"item": "成交量", "value": 149422915},
+        ]
+    )
+
+    quote = build_single_quote(frame, "SSE:600000", fetched_at, "AKSHARE_XUEQIU_SINGLE")
+
+    assert quote["name"] == "浦发银行"
+    assert quote["changePercent"] == 5.7
+
+
+def test_rejects_single_quote_without_required_item_value(fetched_at: datetime) -> None:
+    with pytest.raises(InvalidMarketData, match="item/value"):
+        build_single_quote(
+            pd.DataFrame([{"名称": "错误"}]),
+            "SSE:600000",
+            fetched_at,
+            "AKSHARE_XUEQIU_SINGLE",
+        )
 
 
 @pytest.mark.parametrize(
