@@ -1,6 +1,8 @@
 name: Desktop installers
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       api_url:
@@ -13,7 +15,11 @@ permissions:
   contents: read
 
 env:
-  VITE_API_URL: ${{ inputs.api_url }}
+  VITE_API_URL: ${{ inputs.api_url || 'https://211.159.158.165' }}
+
+concurrency:
+  group: desktop-installers-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   macos-arm64:
@@ -65,6 +71,11 @@ jobs:
           $exe = Get-ChildItem "$bundle/nsis/*setup.exe" | Select-Object -First 1
           $msi = Get-ChildItem "$bundle/msi/*.msi" | Select-Object -First 1
           if (-not $exe -or -not $msi) { throw "Tauri did not produce both NSIS and MSI installers" }
+          $appExe = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/trading-assistant.exe"
+          $bytes = [System.IO.File]::ReadAllBytes($appExe)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -ne 0x8664) { throw "Desktop executable is not x86_64 PE" }
           $exeOut = "$output/StockTradingAssistant_${version}_windows-x64-setup.exe"
           $msiOut = "$output/StockTradingAssistant_${version}_windows-x64.msi"
           Copy-Item $exe.FullName $exeOut
@@ -79,3 +90,33 @@ jobs:
           name: StockTradingAssistant-windows-x64
           path: build/installers/*/windows-x64/*
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos-arm64, windows-x64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: StockTradingAssistant-macos-arm64
+          path: release-assets/macos-arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: StockTradingAssistant-windows-x64
+          path: release-assets/windows-x64
+      - name: Verify version and prepare uniquely named assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          bash deploy/desktop/prepare-release-assets.sh "${version}" release-assets publish
+          echo "RELEASE_VERSION=${version}" >> "${GITHUB_ENV}"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash deploy/desktop/publish-github-release.sh \
+          "${GITHUB_REF_NAME}" "${RELEASE_VERSION}" publish
