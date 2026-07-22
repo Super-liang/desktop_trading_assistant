@@ -32,16 +32,17 @@ export type PortfolioItem = {
   quantity: number;
   costPrice: number;
   sortOrder: number;
-  quote: Quote;
-  marketValue: number;
-  profit: number;
-  returnPercent: number;
+  quote: Quote | null;
+  marketValue: number | null;
+  profit: number | null;
+  returnPercent: number | null;
 };
 
 export type PortfolioSummary = {
   items: PortfolioItem[];
   totalMarketValue: number;
   totalProfit: number;
+  unavailableQuoteCount: number;
   calculationNotice: string;
 };
 
@@ -74,7 +75,7 @@ export type MarketDataConfig = {
 };
 
 export type MarketDataComponentStatus = {
-  id: "AKSHARE_GATEWAY" | "REDIS_SNAPSHOT" | "UPSTREAM";
+  id: "SPRING_API" | "AKSHARE_GATEWAY" | "REDIS_SNAPSHOT" | "UPSTREAM";
   label: string;
   status: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN" | "NOT_APPLICABLE";
   lastSuccessAt?: string;

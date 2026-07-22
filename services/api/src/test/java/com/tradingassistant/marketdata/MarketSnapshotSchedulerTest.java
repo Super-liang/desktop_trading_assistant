@@ -20,8 +20,12 @@ class MarketSnapshotSchedulerTest {
     @Test
     void identifiesShanghaiTradingSessions() {
         assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T01:15:00Z"))).isTrue();
+        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T03:30:00Z"))).isTrue();
+        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T03:30:01Z"))).isFalse();
         assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T04:00:00Z"))).isFalse();
         assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T05:00:00Z"))).isTrue();
+        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T07:00:00Z"))).isTrue();
+        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T07:00:01Z"))).isFalse();
         assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-25T02:00:00Z"))).isFalse();
     }
 

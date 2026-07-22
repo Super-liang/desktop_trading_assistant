@@ -3,8 +3,11 @@ package com.tradingassistant.quote;
 import com.tradingassistant.config.AppProperties;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -25,7 +28,7 @@ public class QuoteProviderRegistry {
 
     public QuoteProvider active() {
         return providers.stream().filter(QuoteProvider::healthy).findFirst()
-                .orElseThrow(() -> new IllegalStateException("当前没有可用行情源"));
+                .orElseThrow(() -> new QuoteUnavailableException("当前没有可用行情源"));
     }
 
     public List<ProviderStatus> status() {
@@ -44,22 +47,27 @@ public class QuoteProviderRegistry {
         }
         Instant now = Instant.now();
         return execute(provider -> {
-            List<Quote> result = provider.snapshots(instruments);
-            HashSet<String> returned = result.stream().map(Quote::instrumentId)
-                    .collect(java.util.stream.Collectors.toCollection(HashSet::new));
-            boolean complete = instruments.stream().map(InstrumentId::canonical)
-                    .allMatch(returned::contains);
-            if (!complete) {
-                throw new IllegalStateException("行情源返回不完整");
-            }
-            return result;
+            return provider.snapshots(instruments);
         }, "snapshots").stream()
                 .map(quote -> {
                     boolean expired = quote.sourceTimestamp() == null
                             || Duration.between(quote.sourceTimestamp(), now).toSeconds()
                             > properties.quotes().staleSeconds();
-                    return quote.withStale(quote.stale() || expired);
+                    return quote.withMarketState(marketPhase(now), quote.stale() || expired);
                 }).toList();
+    }
+
+    private static String marketPhase(Instant now) {
+        ZonedDateTime local = now.atZone(ZoneId.of("Asia/Shanghai"));
+        DayOfWeek day = local.getDayOfWeek();
+        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) return "CLOSED";
+        LocalTime time = local.toLocalTime();
+        if (time.isBefore(LocalTime.of(9, 15))) return "PRE_OPEN";
+        if (time.isBefore(LocalTime.of(9, 30))) return "AUCTION";
+        if (time.isBefore(LocalTime.of(11, 30))) return "CONTINUOUS";
+        if (time.isBefore(LocalTime.of(13, 0))) return "BREAK";
+        if (time.isBefore(LocalTime.of(15, 0))) return "CONTINUOUS";
+        return "CLOSED";
     }
 
     private <T> T execute(Function<QuoteProvider, T> operation, String operationName) {
@@ -75,7 +83,7 @@ public class QuoteProviderRegistry {
                         provider.id(), operationName);
             }
         }
-        throw new IllegalStateException("当前没有可用行情源", last);
+        throw new QuoteUnavailableException("当前没有可用行情源", last);
     }
 
     public record ProviderStatus(String id, int priority, boolean healthy, boolean demo,

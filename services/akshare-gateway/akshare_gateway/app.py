@@ -266,6 +266,23 @@ def create_app(
                 break
         return results
 
+    @application.get("/v1/instruments/catalog", dependencies=[Depends(authorize)])
+    def instrument_catalog() -> list[dict]:
+        try:
+            directory = instrument_cache.get().quotes
+        except UpstreamUnavailable as exception:
+            raise HTTPException(status_code=503, detail="A 股证券目录暂不可用") from exception
+        return [
+            {
+                "instrumentId": instrument_id,
+                "code": instrument["code"],
+                "name": instrument["name"],
+                "exchange": instrument_id.split(":", 1)[0],
+                "assetType": asset_type_for(instrument["code"]),
+            }
+            for instrument_id, instrument in directory.items()
+        ]
+
     @application.get("/v1/market/snapshot", dependencies=[Depends(authorize)])
     def market_snapshot(source: MarketSource) -> list[dict]:
         source_id = f"SNAPSHOT_{source.value}"
@@ -294,7 +311,7 @@ def create_app(
         try:
             for symbol in normalized:
                 if monotonic() >= single_batch_deadline.get():
-                    raise HTTPException(status_code=503, detail="单股行情批量查询超时")
+                    break
                 cache_key = f"{request.source.value}:{symbol}"
                 with single_caches_lock:
                     if cache_key not in single_caches:
@@ -321,14 +338,21 @@ def create_app(
                     quote_cache = single_caches[cache_key]
                 try:
                     snapshot = quote_cache.get()
-                except UpstreamUnavailable as exception:
-                    raise HTTPException(status_code=503, detail="所选单股行情源暂不可用") from exception
+                except UpstreamUnavailable:
+                    log.warning(
+                        "AKShare 单股行情部分失败：source=%s,symbol=%s",
+                        request.source.value,
+                        symbol,
+                    )
+                    continue
                 quote = dict(snapshot.quotes[symbol])
                 quote["receivedAt"] = now()
                 quote["stale"] = snapshot.stale
                 results.append(quote)
         finally:
             single_batch_deadline.reset(deadline_token)
+        if not results:
+            raise HTTPException(status_code=503, detail="所选单股行情源暂不可用")
         return results
 
     @application.get("/v1/sources/status", dependencies=[Depends(authorize)])

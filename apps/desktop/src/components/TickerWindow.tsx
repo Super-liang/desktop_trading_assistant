@@ -66,6 +66,8 @@ export function TickerWindow() {
     portfolio.data?.items ?? [],
     portfolio.isError,
   );
+  const noValuation = Boolean(portfolio.data?.items.length
+    && portfolio.data.unavailableQuoteCount === portfolio.data.items.length);
 
   return (
     <main ref={tickerRef} className="ticker-window" data-layout={layout.mode} style={tickerStyle}>
@@ -83,8 +85,8 @@ export function TickerWindow() {
       </header>
       <section className="ticker-content">
         <div className="ticker-total"><span>浮动盈亏</span><strong className={(portfolio.data?.totalProfit ?? 0) >= 0 ? "up" : "down"}>
-          {(portfolio.data?.totalProfit ?? 0) >= 0 ? "+" : ""}¥ {money(portfolio.data?.totalProfit ?? 0)}</strong>
-          <small>总市值 ¥ {money(portfolio.data?.totalMarketValue ?? 0)}</small></div>
+          {noValuation ? "--" : `${(portfolio.data?.totalProfit ?? 0) >= 0 ? "+" : ""}¥ ${money(portfolio.data?.totalProfit ?? 0)}`}</strong>
+          <small>{noValuation ? "总市值 --" : `总市值 ¥ ${money(portfolio.data?.totalMarketValue ?? 0)}`}</small></div>
         <PortfolioTable items={portfolio.data?.items ?? []} compact />
         <footer>{quoteSource.notice} · 不含费用税费 · 老板键 ⌘/Ctrl+Shift+H</footer>
       </section>

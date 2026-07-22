@@ -28,7 +28,23 @@ export function summarizeQuoteSource(
     };
   }
 
-  const quotes = items.map((item) => item.quote);
+  const quotes = items.map((item) => item.quote).filter((quote) => quote !== null);
+  if (!quotes.length) {
+    return {
+      badge: "WAIT",
+      notice: "自选已保存 · 当前行情暂不可用，将自动重试",
+      status: "等待行情",
+      estimate: "暂无可用行情",
+    };
+  }
+  if (quotes.length < items.length) {
+    return {
+      badge: "DEGRADED",
+      notice: `${items.length - quotes.length} 只证券行情暂不可用 · 其余行情继续展示`,
+      status: "部分行情降级",
+      estimate: "仅汇总可用行情",
+    };
+  }
   const sources = [...new Set(quotes.map((quote) => quote.source || "UNKNOWN"))];
   const stale = quotes.some((quote) => quote.stale);
   const demo = quotes.every((quote) => quote.demo || quote.source === "DEMO");

@@ -7,6 +7,10 @@ public final class PortfolioCalculator {
     private PortfolioCalculator() {}
 
     public static Result calculate(BigDecimal quantity, BigDecimal costPrice, BigDecimal last) {
+        if (quantity.signum() == 0 || costPrice.signum() == 0) {
+            return new Result(BigDecimal.ZERO.setScale(2), BigDecimal.ZERO.setScale(2),
+                    BigDecimal.ZERO.setScale(4));
+        }
         BigDecimal marketValue = last.multiply(quantity).setScale(2, RoundingMode.HALF_UP);
         BigDecimal profit = last.subtract(costPrice).multiply(quantity)
                 .setScale(2, RoundingMode.HALF_UP);
@@ -17,4 +21,3 @@ public final class PortfolioCalculator {
 
     public record Result(BigDecimal marketValue, BigDecimal profit, BigDecimal returnPercent) {}
 }
-

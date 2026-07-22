@@ -89,6 +89,8 @@ export function Dashboard() {
   if (marketDataSettings) return <MarketDataSettings isAdmin={session.role === "ADMIN"}
     onBack={() => setMarketDataSettings(false)} />;
   const data = portfolio.data;
+  const noValuation = Boolean(data?.items.length
+    && data.unavailableQuoteCount === data.items.length);
   const quoteSource = summarizeQuoteSource(data?.items ?? [], portfolio.isError);
   return (
     <div className="app-shell">
@@ -121,11 +123,12 @@ export function Dashboard() {
         <MarketStatusLights />
         <section className="summary-grid">
           <article className="summary-card featured"><small>持仓总市值</small>
-            <strong>¥ {money(data?.totalMarketValue ?? 0)}</strong><span>{quoteSource.estimate}</span></article>
+            <strong>{noValuation ? "--" : `¥ ${money(data?.totalMarketValue ?? 0)}`}</strong>
+            <span>{quoteSource.estimate}</span></article>
           <article className="summary-card"><small>累计浮盈亏</small>
             <strong className={(data?.totalProfit ?? 0) >= 0 ? "up" : "down"}>
-              {(data?.totalProfit ?? 0) >= 0 ? "+" : ""}¥ {money(data?.totalProfit ?? 0)}</strong>
-            <span>不含费用与税费</span></article>
+              {noValuation ? "--" : `${(data?.totalProfit ?? 0) >= 0 ? "+" : ""}¥ ${money(data?.totalProfit ?? 0)}`}</strong>
+            <span>{data?.unavailableQuoteCount ? `${data.unavailableQuoteCount} 只证券未计入` : "不含费用与税费"}</span></article>
           <article className="summary-card"><small>数据状态</small><strong className="status-live">
             <i /> {quoteSource.status}</strong>
             <span>每 2 秒刷新 · 来源可追溯</span></article>
@@ -134,7 +137,9 @@ export function Dashboard() {
           <div className="section-title"><div><p className="eyebrow">WATCHLIST</p><h2>自选与持仓</h2></div>
             <span>{data?.items.length ?? 0} 个标的</span></div>
           {portfolio.isLoading ? <div className="empty-state">正在连接行情网关…</div>
-            : portfolio.isError ? <div className="empty-state error">无法连接 API，请确认服务端已启动。</div>
+            : portfolio.isError ? <div className="empty-state error">
+              {portfolio.error instanceof Error ? portfolio.error.message : "行情列表加载失败，请稍后重试"}
+            </div>
             : <PortfolioTable items={data?.items ?? []} onDelete={remove} onEdit={setEditing} />}
         </section>
         <footer>{data?.calculationNotice ?? "浮盈亏仅供参考"} · 最后行情时间会随每条数据展示</footer>

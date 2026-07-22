@@ -6,16 +6,34 @@ import { useAuth } from "../store/auth";
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 const IS_TICKER = new URLSearchParams(window.location.search).get("view") === "ticker";
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, retry = true,
+  timeoutMs = 12_000): Promise<T> {
   const session = useAuth.getState().session;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {}),
-      ...init.headers,
-    },
-  });
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  const abort = () => controller.abort(init.signal?.reason);
+  if (init.signal?.aborted) abort();
+  else init.signal?.addEventListener("abort", abort, { once: true });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch (reason) {
+    if (timedOut) throw new Error("请求超时，请检查网络后重试");
+    if (init.signal?.aborted) throw reason;
+    throw new Error("无法连接 API，请检查网络或服务状态");
+  } finally {
+    window.clearTimeout(timeout);
+    init.signal?.removeEventListener("abort", abort);
+  }
   if (response.status === 401 && retry && session?.refreshToken && !path.includes("/auth/refresh")) {
     // 刷新令牌只能由主窗轮换；小窗等待主窗广播，避免双 WebView 并发触发重放保护。
     if (IS_TICKER) {
@@ -58,13 +76,14 @@ export const api = {
   deleteAccount: (password: string) =>
     request<void>("/api/v1/me", { method: "DELETE", body: JSON.stringify({ password }) }),
   portfolio: () => request<PortfolioSummary>("/api/v1/portfolio/items"),
-  search: (query: string) =>
-    request<SearchResult[]>(`/api/v1/quotes/search?query=${encodeURIComponent(query)}`),
+  search: (query: string, signal?: AbortSignal) =>
+    request<SearchResult[]>(`/api/v1/instruments/search?query=${encodeURIComponent(query)}`,
+      { signal }, true, 8_000),
   addItem: (body: {
-    instrumentId: string; displayName: string; quantity: number; costPrice: number; sortOrder: number;
+    instrumentId: string; displayName: string; quantity: number; costPrice: number | null; sortOrder: number;
   }) => request("/api/v1/portfolio/items", { method: "POST", body: JSON.stringify(body) }),
   updateItem: (id: string, body: {
-    instrumentId: string; displayName: string; quantity: number; costPrice: number; sortOrder: number;
+    instrumentId: string; displayName: string; quantity: number; costPrice: number | null; sortOrder: number;
   }) => request(`/api/v1/portfolio/items/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteItem: (id: string) => request<void>(`/api/v1/portfolio/items/${id}`, { method: "DELETE" }),
   users: (query = "") =>

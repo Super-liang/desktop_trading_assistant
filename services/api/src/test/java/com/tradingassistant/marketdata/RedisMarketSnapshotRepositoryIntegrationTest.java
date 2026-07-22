@@ -39,7 +39,7 @@ class RedisMarketSnapshotRepositoryIntegrationTest {
         redis.afterPropertiesSet();
         deleteTestKeys();
         repository = new RedisMarketSnapshotRepository(
-                redis, new ObjectMapper().findAndRegisterModules(), 60);
+                redis, new ObjectMapper().findAndRegisterModules());
     }
 
     @AfterEach
@@ -49,7 +49,7 @@ class RedisMarketSnapshotRepositoryIntegrationTest {
     }
 
     @Test
-    void atomicallyReplacesHashWithTtlAndSafelyReleasesLock() {
+    void incrementallyUpdatesPermanentSnapshotAndSafelyReleasesLock() {
         Instant fetchedAt = Instant.parse("2026-07-22T02:00:00Z");
         Quote quote = new Quote("SSE:600519", "贵州茅台", new BigDecimal("1450.50"),
                 new BigDecimal("1440"), new BigDecimal("1442"), new BigDecimal("1460"),
@@ -61,11 +61,22 @@ class RedisMarketSnapshotRepositoryIntegrationTest {
 
         assertThat(repository.find(MarketDataConfig.SnapshotSource.EASTMONEY,
                 List.of(InstrumentId.parse("SSE:600519")))).containsExactly(quote);
+        redis.expire(PREFIX + "eastmoney", Duration.ofSeconds(60));
         assertThat(repository.metadata(MarketDataConfig.SnapshotSource.EASTMONEY))
                 .get().extracting(RedisMarketSnapshotRepository.SnapshotMetadata::quoteCount)
                 .isEqualTo(1);
-        assertThat(redis.getExpire(PREFIX + "eastmoney")).isPositive();
-        assertThat(redis.keys(PREFIX + "eastmoney:tmp:*")).isEmpty();
+        assertThat(redis.getExpire(PREFIX + "eastmoney")).isEqualTo(-1);
+        assertThat(redis.hasKey(PREFIX + "eastmoney:meta")).isFalse();
+
+        Quote second = new Quote("SZSE:000001", "平安银行", new BigDecimal("11.20"),
+                new BigDecimal("11.10"), new BigDecimal("11.12"), new BigDecimal("11.30"),
+                new BigDecimal("11.00"), new BigDecimal("0.10"), new BigDecimal("0.90"),
+                new BigDecimal("9876500"), "CONTINUOUS", "AKSHARE_EASTMONEY_SNAPSHOT",
+                fetchedAt, fetchedAt, true, false, false);
+        repository.replace(MarketDataConfig.SnapshotSource.EASTMONEY, List.of(second));
+        assertThat(repository.find(MarketDataConfig.SnapshotSource.EASTMONEY, List.of(
+                InstrumentId.parse("SSE:600519"), InstrumentId.parse("SZSE:000001"))))
+                .containsExactly(quote, second);
 
         String firstToken = repository.acquireRefreshLock(10).orElseThrow();
         assertThat(repository.acquireRefreshLock(10)).isEmpty();
@@ -73,6 +84,46 @@ class RedisMarketSnapshotRepositoryIntegrationTest {
         assertThat(repository.acquireRefreshLock(10)).isEmpty();
         repository.releaseRefreshLock(firstToken);
         assertThat(repository.acquireRefreshLock(10)).isPresent();
+    }
+
+    @Test
+    void startupMigrationRecoversMetadataFromQuotesAndRemovesLegacyTtl() {
+        Instant fetchedAt = Instant.parse("2026-07-22T02:00:00Z");
+        Quote quote = new Quote("SSE:600519", "贵州茅台", new BigDecimal("1450.50"),
+                new BigDecimal("1440"), new BigDecimal("1442"), new BigDecimal("1460"),
+                new BigDecimal("1438"), new BigDecimal("10.50"), new BigDecimal("0.73"),
+                new BigDecimal("12345600"), "CONTINUOUS", "AKSHARE_SINA_SNAPSHOT",
+                fetchedAt, fetchedAt, true, false, false);
+        repository.replace(MarketDataConfig.SnapshotSource.SINA, List.of(quote));
+        redis.opsForHash().delete(PREFIX + "sina", "__metadata__");
+        redis.expire(PREFIX + "sina", Duration.ofSeconds(60));
+
+        repository.migrateLegacySnapshots();
+
+        assertThat(repository.metadata(MarketDataConfig.SnapshotSource.SINA))
+                .get().extracting(RedisMarketSnapshotRepository.SnapshotMetadata::fetchedAt)
+                .isEqualTo(fetchedAt);
+        assertThat(redis.getExpire(PREFIX + "sina")).isEqualTo(-1);
+        assertThat(repository.find(MarketDataConfig.SnapshotSource.SINA,
+                List.of(InstrumentId.parse("SSE:600519")))).containsExactly(quote);
+    }
+
+    @Test
+    void rejectsEmptyRefreshWithoutChangingLastSnapshot() {
+        Quote quote = new Quote("SSE:600519", "贵州茅台", new BigDecimal("1450.50"),
+                new BigDecimal("1440"), new BigDecimal("1442"), new BigDecimal("1460"),
+                new BigDecimal("1438"), new BigDecimal("10.50"), new BigDecimal("0.73"),
+                new BigDecimal("12345600"), "CONTINUOUS", "AKSHARE_SINA_SNAPSHOT",
+                Instant.parse("2026-07-22T02:00:00Z"), Instant.parse("2026-07-22T02:00:00Z"),
+                true, false, false);
+        repository.replace(MarketDataConfig.SnapshotSource.SINA, List.of(quote));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> repository.replace(MarketDataConfig.SnapshotSource.SINA, List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(repository.find(MarketDataConfig.SnapshotSource.SINA,
+                List.of(InstrumentId.parse("SSE:600519")))).containsExactly(quote);
     }
 
     private void deleteTestKeys() {

@@ -27,7 +27,7 @@ class AkshareConfiguredQuoteProviderTest {
     }
 
     @Test
-    void eastmoneySingleModeRejectsBseBeforeCallingGateway() {
+    void eastmoneySingleModeSkipsBseWithoutDroppingSupportedStocks() {
         var configs = mock(MarketDataConfigService.class);
         var redis = mock(RedisMarketSnapshotRepository.class);
         var gateway = mock(AkshareGatewayClient.class);
@@ -38,12 +38,16 @@ class AkshareConfiguredQuoteProviderTest {
         when(configs.current()).thenReturn(config);
         var provider = new AkshareConfiguredQuoteProvider(configs, redis, gateway, properties());
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                provider.snapshots(List.of(InstrumentId.parse("BSE:830799"))))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("北交所");
+        InstrumentId shanghai = InstrumentId.parse("SSE:600519");
+        InstrumentId beijing = InstrumentId.parse("BSE:830799");
+        Quote quote = mock(Quote.class);
+        when(gateway.singleQuotes(MarketDataConfig.SingleSource.EASTMONEY, List.of(shanghai)))
+                .thenReturn(List.of(quote));
+
+        assertThat(provider.snapshots(List.of(shanghai, beijing))).containsExactly(quote);
+        assertThat(provider.snapshots(List.of(beijing))).isEmpty();
         assertThat(provider.exchanges()).doesNotContain(InstrumentId.Exchange.BSE);
-        verifyNoInteractions(gateway);
+        verify(gateway).singleQuotes(MarketDataConfig.SingleSource.EASTMONEY, List.of(shanghai));
     }
 
     private AppProperties properties() {

@@ -47,17 +47,15 @@ class MockQuoteProviderTest {
     }
 
     @Test
-    void emptyRequestDoesNotCallProviderAndPartialResponseFallsBack() {
+    void emptyRequestDoesNotCallProviderAndPartialResponseStaysIsolated() {
         AppProperties properties = new AppProperties(
                 null, null, quotesProperties());
         QuoteProvider partial = new StubProvider("PARTIAL", 1, true);
-        QuoteProvider complete = new MockQuoteProvider(properties);
         QuoteProviderRegistry registry = new QuoteProviderRegistry(
-                List.of(partial, complete), properties);
+                List.of(partial), properties);
 
         assertThat(registry.snapshots(List.of())).isEmpty();
-        assertThat(registry.snapshots(List.of(InstrumentId.parse("600000"))))
-                .singleElement().extracting(Quote::source).isEqualTo("DEMO");
+        assertThat(registry.snapshots(List.of(InstrumentId.parse("600000")))).isEmpty();
     }
 
     private static class StubProvider implements QuoteProvider {

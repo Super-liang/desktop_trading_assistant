@@ -69,4 +69,9 @@ describe("summarizeQuoteSource", () => {
       status: "等待添加标的",
     });
   });
+
+  it("部分证券无行情时明确显示降级", () => {
+    expect(summarizeQuoteSource([item(), { ...item(), id: "2", quote: null }]))
+      .toMatchObject({ badge: "DEGRADED", status: "部分行情降级" });
+  });
 });

@@ -27,4 +27,10 @@ public record Quote(
                 changePercent, volume, marketPhase, source, sourceTimestamp, receivedAt,
                 delayed, value, demo);
     }
+
+    public Quote withMarketState(String phase, boolean staleValue) {
+        return new Quote(instrumentId, name, last, previousClose, open, high, low, change,
+                changePercent, volume, phase, source, sourceTimestamp, receivedAt,
+                delayed, staleValue, demo);
+    }
 }

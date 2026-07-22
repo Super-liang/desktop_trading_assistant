@@ -59,6 +59,12 @@ public class AkshareGatewayClient {
         return result == null ? List.of() : result;
     }
 
+    public List<CatalogInstrument> catalog() {
+        List<CatalogInstrument> result = client.get().uri("/v1/instruments/catalog")
+                .retrieve().body(new ParameterizedTypeReference<>() {});
+        return result == null ? List.of() : result;
+    }
+
     public GatewayHealth health() {
         return statusClient.get().uri("/health").retrieve().body(GatewayHealth.class);
     }
@@ -81,4 +87,6 @@ public class AkshareGatewayClient {
     public record GatewayHealth(String status, String source) {}
     public record SourceHealth(String source, String status, Instant lastAttemptAt,
             Instant lastSuccessAt, Long latencyMillis, String errorType) {}
+    public record CatalogInstrument(String instrumentId, String code, String name,
+            InstrumentId.Exchange exchange, InstrumentId.AssetType assetType) {}
 }

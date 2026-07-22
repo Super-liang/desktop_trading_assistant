@@ -60,11 +60,13 @@ public class AkshareConfiguredQuoteProvider implements QuoteProvider {
         if (config.getMode() == MarketDataConfig.Mode.MARKET_SNAPSHOT) {
             return snapshots.find(config.getSnapshotSource(), instruments);
         }
-        if (config.getSingleSource() == MarketDataConfig.SingleSource.EASTMONEY
-                && instruments.stream().anyMatch(item -> item.exchange() == InstrumentId.Exchange.BSE)) {
-            throw new IllegalStateException("东财单股行情暂不支持北交所证券");
+        List<InstrumentId> supported = instruments;
+        if (config.getSingleSource() == MarketDataConfig.SingleSource.EASTMONEY) {
+            supported = instruments.stream()
+                    .filter(item -> item.exchange() != InstrumentId.Exchange.BSE).toList();
         }
-        return gateway.singleQuotes(config.getSingleSource(), instruments);
+        if (supported.isEmpty()) return List.of();
+        return gateway.singleQuotes(config.getSingleSource(), supported);
     }
 
     @Override

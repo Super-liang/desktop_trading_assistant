@@ -41,7 +41,8 @@ describe("PortfolioTable", () => {
     const { container } = render(<PortfolioTable items={[item]} compact />);
     expect(screen.getByText("贵州茅台")).toBeInTheDocument();
     expect(screen.getByText(/DEMO/)).toBeInTheDocument();
-    expect(screen.getByText("行情已过期")).toBeInTheDocument();
+    expect(screen.getByText("最后数据 · 已陈旧")).toBeInTheDocument();
+    expect(screen.getByText(/最后刷新/)).toBeInTheDocument();
     expect(screen.getByText("+¥ 5,000.00")).toBeInTheDocument();
     const quote = container.querySelector(".quote-row:not(.quote-head)");
     expect(quote?.querySelector(".quote-security")).toHaveTextContent("贵州茅台");
@@ -49,5 +50,15 @@ describe("PortfolioTable", () => {
     expect(quote?.querySelector(".quote-position")).toHaveTextContent("成本 1,400.00");
     expect(quote?.querySelector(".quote-market-value")).toHaveTextContent("¥ 145,000.00");
     expect(quote?.querySelector(".quote-profit")).toHaveTextContent("+¥ 5,000.00");
+  });
+
+  it("无行情时显示未知而不是零市值和零盈亏", () => {
+    render(<PortfolioTable items={[{
+      ...item, quote: null, marketValue: null, profit: null, returnPercent: null,
+    }]} compact />);
+
+    expect(screen.getByText("暂无行情时间")).toBeInTheDocument();
+    expect(screen.getByText("行情暂不可用")).toBeInTheDocument();
+    expect(screen.getAllByText("--")).toHaveLength(3);
   });
 });

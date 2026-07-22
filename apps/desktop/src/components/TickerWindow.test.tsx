@@ -34,6 +34,7 @@ describe("TickerWindow", () => {
       items: [],
       totalProfit: 0,
       totalMarketValue: 0,
+      unavailableQuoteCount: 0,
     });
     window.localStorage.clear();
     resizeCallback = undefined;
@@ -58,6 +59,7 @@ describe("TickerWindow", () => {
       }],
       totalProfit: 5000,
       totalMarketValue: 145000,
+      unavailableQuoteCount: 0,
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
@@ -69,6 +71,25 @@ describe("TickerWindow", () => {
     expect(await screen.findByText("隐线 · AKSHARE")).toBeInTheDocument();
     expect(screen.getByText(/公开延迟行情/)).toBeInTheDocument();
     expect(screen.queryByText(/演示行情/)).not.toBeInTheDocument();
+  });
+
+  it("全部无行情时不把未知估值显示为零", async () => {
+    portfolio.mockResolvedValue({
+      items: [{
+        id: "1", instrumentId: "SSE:600519", displayName: "贵州茅台",
+        quantity: 100, costPrice: 1400, sortOrder: 0,
+        marketValue: null, profit: null, returnPercent: null, quote: null,
+      }],
+      totalProfit: 0,
+      totalMarketValue: 0,
+      unavailableQuoteCount: 1,
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><TickerWindow /></QueryClientProvider>);
+
+    expect(await screen.findByText("总市值 --")).toBeInTheDocument();
+    expect(screen.getByText("隐线 · WAIT")).toBeInTheDocument();
+    expect(screen.queryByText("+¥ 0.00")).not.toBeInTheDocument();
   });
 
   it("恢复、即时渲染并持久化文字透明度，且不低于 20%", async () => {

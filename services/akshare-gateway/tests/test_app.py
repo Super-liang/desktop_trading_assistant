@@ -197,6 +197,43 @@ def test_instrument_search_uses_directory_without_loading_market_snapshot(
     assert directory_calls == [True]
 
 
+def test_instrument_catalog_returns_normalized_full_directory(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    client = client_for(
+        market_frame,
+        fetched_at,
+        instrument_frame_loader=lambda: pd.DataFrame(
+            [
+                {"code": 1.0, "name": "平安银行"},
+                {"code": "600519", "name": "贵州茅台"},
+            ]
+        ),
+    )
+
+    response = client.get(
+        "/v1/instruments/catalog", headers={"X-API-Key": "test-shared-key"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "instrumentId": "SZSE:000001",
+            "code": "000001",
+            "name": "平安银行",
+            "exchange": "SZSE",
+            "assetType": "STOCK",
+        },
+        {
+            "instrumentId": "SSE:600519",
+            "code": "600519",
+            "name": "贵州茅台",
+            "exchange": "SSE",
+            "assetType": "STOCK",
+        },
+    ]
+
+
 def test_single_quotes_are_normalized_and_cached(
     monkeypatch, fetched_at: datetime, market_frame: pd.DataFrame
 ) -> None:
@@ -232,6 +269,36 @@ def test_single_quotes_are_normalized_and_cached(
     assert next(item for item in statuses if item["source"] == "SINGLE_XUEQIU")["status"] == "UP"
 
 
+def test_single_quotes_keep_successful_symbols_when_one_upstream_fails(
+    fetched_at: datetime, market_frame: pd.DataFrame
+) -> None:
+    single_frame = pd.DataFrame(
+        [
+            {"item": "最新", "value": 10.2}, {"item": "昨收", "value": 10},
+            {"item": "今开", "value": 10}, {"item": "最高", "value": 10.3},
+            {"item": "最低", "value": 9.9}, {"item": "涨跌", "value": 0.2},
+            {"item": "涨幅", "value": 2}, {"item": "总手", "value": 100},
+        ]
+    )
+
+    def partly_unavailable(source, symbol):
+        if symbol == "SSE:600001":
+            raise ConnectionError("upstream unavailable")
+        return single_frame
+
+    client = client_for(
+        market_frame, fetched_at, single_frame_loader=partly_unavailable,
+    )
+    response = client.post(
+        "/v1/quotes/single",
+        headers={"X-API-Key": "test-shared-key"},
+        json={"source": "EASTMONEY", "symbols": ["SSE:600000", "SSE:600001"]},
+    )
+
+    assert response.status_code == 200
+    assert [quote["instrumentId"] for quote in response.json()] == ["SSE:600000"]
+
+
 def test_new_source_endpoints_require_api_key(
     market_frame: pd.DataFrame, fetched_at: datetime
 ) -> None:
@@ -243,6 +310,7 @@ def test_new_source_endpoints_require_api_key(
         json={"source": "EASTMONEY", "symbols": ["SSE:600000"]},
     ).status_code == 401
     assert client.get("/v1/sources/status").status_code == 401
+    assert client.get("/v1/instruments/catalog").status_code == 401
 
 
 def test_single_quote_cache_is_bounded(
@@ -338,6 +406,7 @@ def test_single_quote_batch_stops_at_shared_deadline(
         json={"source": "EASTMONEY", "symbols": symbols},
     )
 
-    assert response.status_code == 503
+    assert response.status_code == 200
     assert monotonic() - started < 2
+    assert 0 < len(response.json()) < 50
     assert len(calls) < 50

@@ -48,7 +48,7 @@ public class QuoteController {
                 emitter.send(SseEmitter.event()
                         .name("quotes")
                         .data(registry.snapshots(instruments)));
-            } catch (IOException | IllegalStateException exception) {
+            } catch (IOException | QuoteUnavailableException exception) {
                 emitter.completeWithError(exception);
             }
         }, 0, Math.max(500, properties.quotes().tickMillis()), TimeUnit.MILLISECONDS);

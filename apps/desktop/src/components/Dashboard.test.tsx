@@ -25,12 +25,14 @@ vi.mock("../lib/api", () => ({
   api: {
     logout,
     portfolio: vi.fn().mockResolvedValue({
-      items: [], totalMarketValue: 0, totalProfit: 0, calculationNotice: "测试",
+      items: [], totalMarketValue: 0, totalProfit: 0, unavailableQuoteCount: 0,
+      calculationNotice: "测试",
     }),
     marketDataStatus: vi.fn().mockResolvedValue({
       mode: "MARKET_SNAPSHOT",
       checkedAt: "2026-07-22T01:00:00Z",
       components: [
+        { id: "SPRING_API", label: "Spring API", status: "UP", detail: "服务正常" },
         { id: "AKSHARE_GATEWAY", label: "AKShare 网关", status: "UP", detail: "UP" },
         { id: "REDIS_SNAPSHOT", label: "Redis 快照", status: "UP", ageSeconds: 3 },
         { id: "UPSTREAM", label: "SNAPSHOT_EASTMONEY", status: "UP", detail: "120 ms" },

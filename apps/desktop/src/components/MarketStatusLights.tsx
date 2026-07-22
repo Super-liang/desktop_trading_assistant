@@ -30,7 +30,7 @@ export function MarketStatusLights({ compact = false }: { compact?: boolean }) {
   if (status.isLoading) return <div className="source-lights muted">正在检测行情链路…</div>;
   if (status.isError) {
     return <div className="source-lights"><div className="source-light down-state">
-      <i /><span><strong>行情状态接口</strong><small>无法连接</small></span>
+      <i /><span><strong>Spring API</strong><small>无法连接</small></span>
     </div></div>;
   }
   return <div className={`source-lights ${compact ? "compact" : ""}`}>

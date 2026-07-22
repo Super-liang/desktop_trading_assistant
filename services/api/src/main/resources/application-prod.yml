@@ -52,4 +52,4 @@ app:
       priority: ${QUOTE_HTTP_PRIORITY:10}
   market-data:
     scheduler-enabled: ${MARKET_DATA_SCHEDULER_ENABLED:true}
-    snapshot-max-stale-seconds: ${MARKET_DATA_SNAPSHOT_MAX_STALE_SECONDS:86400}
+    catalog-min-size: ${MARKET_DATA_CATALOG_MIN_SIZE:1000}

@@ -26,6 +26,8 @@ public class MarketDataStatusController {
     public StatusView status() {
         MarketDataConfig config = configs.current();
         List<ComponentStatus> components = new ArrayList<>();
+        components.add(new ComponentStatus("SPRING_API", "Spring API", "UP",
+                Instant.now(), 0L, "服务正常"));
         try {
             AkshareGatewayClient.GatewayHealth health = gateway.health();
             components.add(new ComponentStatus("AKSHARE_GATEWAY", "AKShare 网关",

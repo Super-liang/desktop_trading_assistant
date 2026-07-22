@@ -90,6 +90,11 @@ USER_TOKEN=$(printf '%s' "${REGISTER}" | json_field accessToken)
 
 curl --fail --silent --show-error --max-time 20 \
   -H "Authorization: Bearer ${USER_TOKEN}" \
+  "${BASE_URL}/api/v1/instruments/search?query=600519" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); assert any(x['instrumentId']=='SSE:600519' for x in d)"
+
+curl --fail --silent --show-error --max-time 20 \
+  -H "Authorization: Bearer ${USER_TOKEN}" \
   "${BASE_URL}/api/v1/quotes/providers" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); assert any(x['id']=='AKSHARE_CONFIGURED' and not x['demo'] for x in d)"
 
