@@ -27,7 +27,11 @@ if RELEASE_VERSION="99.0.0" bash -c 'source deploy/desktop/release-env.sh' >/dev
 fi
 
 grep -F -q 'windows-latest' .github/workflows/desktop-installers.yml
-grep -F -q -- '--bundles nsis,msi' .github/workflows/desktop-installers.yml
+grep -F -q -- '--bundles nsis' .github/workflows/desktop-installers.yml
+if grep -F -q -- '--bundles nsis,msi' .github/workflows/desktop-installers.yml; then
+  echo "错误：Windows 正式发布不应被可选 MSI 阻断" >&2
+  exit 1
+fi
 grep -F -q 'APPLE_SIGNING_IDENTITY' .github/workflows/desktop-installers.yml
 grep -F -q 'windows_subsystem = "windows"' apps/desktop/src-tauri/src/main.rs
 grep -F -q "tags: [\"v*\"]" .github/workflows/desktop-installers.yml
@@ -43,19 +47,18 @@ grep -E -q 'actions/download-artifact@[0-9a-f]{40}' .github/workflows/desktop-in
 
 ARTIFACT_ROOT="${TMP_DIR}/artifacts"
 PUBLISH_ROOT="${TMP_DIR}/publish"
-MAC_ROOT="${ARTIFACT_ROOT}/macos-arm64/0.1.0/macos-arm64"
-WINDOWS_ROOT="${ARTIFACT_ROOT}/windows-x64/0.1.0/windows-x64"
+MAC_ROOT="${ARTIFACT_ROOT}/macos-arm64/0.1.1/macos-arm64"
+WINDOWS_ROOT="${ARTIFACT_ROOT}/windows-x64/0.1.1/windows-x64"
 mkdir -p "${MAC_ROOT}" "${WINDOWS_ROOT}"
-touch "${MAC_ROOT}/StockTradingAssistant_0.1.0_macos-arm64.dmg"
-touch "${MAC_ROOT}/StockTradingAssistant_0.1.0_macos-arm64.app.zip"
+touch "${MAC_ROOT}/StockTradingAssistant_0.1.1_macos-arm64.dmg"
+touch "${MAC_ROOT}/StockTradingAssistant_0.1.1_macos-arm64.app.zip"
 touch "${MAC_ROOT}/SHA256SUMS.txt"
-touch "${WINDOWS_ROOT}/StockTradingAssistant_0.1.0_windows-x64-setup.exe"
-touch "${WINDOWS_ROOT}/StockTradingAssistant_0.1.0_windows-x64.msi"
+touch "${WINDOWS_ROOT}/StockTradingAssistant_0.1.1_windows-x64-setup.exe"
 touch "${WINDOWS_ROOT}/SHA256SUMS.txt"
-bash deploy/desktop/prepare-release-assets.sh 0.1.0 "${ARTIFACT_ROOT}" "${PUBLISH_ROOT}"
-[[ $(find "${PUBLISH_ROOT}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 6 ]]
-[[ -f "${PUBLISH_ROOT}/StockTradingAssistant_0.1.0_macos-arm64_SHA256SUMS.txt" ]]
-[[ -f "${PUBLISH_ROOT}/StockTradingAssistant_0.1.0_windows-x64_SHA256SUMS.txt" ]]
+bash deploy/desktop/prepare-release-assets.sh 0.1.1 "${ARTIFACT_ROOT}" "${PUBLISH_ROOT}"
+[[ $(find "${PUBLISH_ROOT}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 5 ]]
+[[ -f "${PUBLISH_ROOT}/StockTradingAssistant_0.1.1_macos-arm64_SHA256SUMS.txt" ]]
+[[ -f "${PUBLISH_ROOT}/StockTradingAssistant_0.1.1_windows-x64_SHA256SUMS.txt" ]]
 
 FAKE_BIN="${TMP_DIR}/bin"
 FAKE_STATE="${TMP_DIR}/release-state"
@@ -100,16 +103,16 @@ EOF
 chmod +x "${FAKE_BIN}/gh"
 PATH="${FAKE_BIN}:${PATH}" FAKE_GH_STATE="${FAKE_STATE}" \
   FAKE_GH_ASSETS="${FAKE_ASSETS}" FAKE_GH_LOG="${FAKE_LOG}" \
-  bash deploy/desktop/publish-github-release.sh v0.1.0 0.1.0 "${PUBLISH_ROOT}"
+  bash deploy/desktop/publish-github-release.sh v0.1.1 0.1.1 "${PUBLISH_ROOT}"
 [[ $(cat "${FAKE_STATE}") == published ]]
-[[ $(find "${FAKE_ASSETS}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 6 ]]
-grep -F -q 'release create v0.1.0 --draft' "${FAKE_LOG}"
-grep -F -q 'release edit v0.1.0 --draft=false --latest' "${FAKE_LOG}"
+[[ $(find "${FAKE_ASSETS}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 5 ]]
+grep -F -q 'release create v0.1.1 --draft' "${FAKE_LOG}"
+grep -F -q 'release edit v0.1.1 --draft=false --latest' "${FAKE_LOG}"
 
 FIRST_RUN_LINES=$(wc -l < "${FAKE_LOG}" | tr -d ' ')
 PATH="${FAKE_BIN}:${PATH}" FAKE_GH_STATE="${FAKE_STATE}" \
   FAKE_GH_ASSETS="${FAKE_ASSETS}" FAKE_GH_LOG="${FAKE_LOG}" \
-  bash deploy/desktop/publish-github-release.sh v0.1.0 0.1.0 "${PUBLISH_ROOT}"
+  bash deploy/desktop/publish-github-release.sh v0.1.1 0.1.1 "${PUBLISH_ROOT}"
 SECOND_RUN_LINES=$(wc -l < "${FAKE_LOG}" | tr -d ' ')
 [[ $((SECOND_RUN_LINES - FIRST_RUN_LINES)) -eq 2 ]]
 

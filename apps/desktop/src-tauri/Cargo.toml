@@ -1,6 +1,6 @@
 [package]
 name = "trading-assistant"
-version = "0.1.0"
+version = "0.1.1"
 description = "跨平台股票盯盘助手"
 authors = ["Trading Assistant"]
 edition = "2021"

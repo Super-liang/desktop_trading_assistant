@@ -14,15 +14,14 @@ EXPECTED_ASSETS=(
   "StockTradingAssistant_${VERSION}_macos-arm64.app.zip"
   "StockTradingAssistant_${VERSION}_macos-arm64_SHA256SUMS.txt"
   "StockTradingAssistant_${VERSION}_windows-x64-setup.exe"
-  "StockTradingAssistant_${VERSION}_windows-x64.msi"
   "StockTradingAssistant_${VERSION}_windows-x64_SHA256SUMS.txt"
 )
 for asset in "${EXPECTED_ASSETS[@]}"; do
   [[ -f ${ASSET_DIR}/${asset} ]] \
     || { echo "错误：缺少发布资产 ${asset}" >&2; exit 1; }
 done
-[[ $(find "${ASSET_DIR}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 6 ]] \
-  || { echo "错误：发布目录必须且只能包含 6 个资产" >&2; exit 1; }
+[[ $(find "${ASSET_DIR}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 5 ]] \
+  || { echo "错误：发布目录必须且只能包含 5 个资产" >&2; exit 1; }
 
 verify_remote_assets() {
   local expected_file actual_file

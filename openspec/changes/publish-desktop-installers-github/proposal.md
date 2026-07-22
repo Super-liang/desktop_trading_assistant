@@ -6,7 +6,7 @@
 
 - 支持推送 `v*` 版本标签后自动触发 macOS ARM64 与 Windows x64 原生构建。
 - 手动触发和标签触发均默认嵌入生产 HTTPS API 地址，并继续允许手动覆盖。
-- 两个平台构建成功后，自动汇总 DMG、APP ZIP、EXE、MSI 与 SHA-256 校验文件。
+- 两个平台构建成功后，自动汇总 DMG、APP ZIP、Windows NSIS EXE 与 SHA-256 校验文件。
 - 自动创建对应标签的 GitHub Release，并上传全部安装包和校验文件。
 - Release 仅在两个平台均构建并验证成功后发布，任何平台失败都不得产生不完整版本。
 
@@ -18,7 +18,7 @@
 
 ### Modified Capabilities
 
-无。
+- `desktop-installer-distribution`: Windows 权威发布产物由“NSIS EXE + MSI”调整为经过 x64 校验的 NSIS EXE；WiX MSI 不再阻断 ToC 安装包发布。
 
 ## Impact
 

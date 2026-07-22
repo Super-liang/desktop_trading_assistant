@@ -40,11 +40,8 @@ copy_unique "${ARTIFACT_ROOT}/windows-x64" \
   "StockTradingAssistant_${VERSION}_windows-x64-setup.exe" \
   "StockTradingAssistant_${VERSION}_windows-x64-setup.exe"
 copy_unique "${ARTIFACT_ROOT}/windows-x64" \
-  "StockTradingAssistant_${VERSION}_windows-x64.msi" \
-  "StockTradingAssistant_${VERSION}_windows-x64.msi"
-copy_unique "${ARTIFACT_ROOT}/windows-x64" \
   "SHA256SUMS.txt" \
   "StockTradingAssistant_${VERSION}_windows-x64_SHA256SUMS.txt"
 
-[[ $(find "${OUTPUT_DIR}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 6 ]] \
-  || { echo "错误：发布资产数量不是 6" >&2; exit 1; }
+[[ $(find "${OUTPUT_DIR}" -maxdepth 1 -type f | wc -l | tr -d ' ') == 5 ]] \
+  || { echo "错误：发布资产数量不是 5" >&2; exit 1; }

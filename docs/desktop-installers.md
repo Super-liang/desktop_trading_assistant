@@ -4,7 +4,7 @@
 
 - 客户端 API：`https://211.159.158.165`
 - macOS：Apple Silicon（arm64），DMG + APP ZIP
-- Windows：x64，NSIS setup.exe + MSI（Windows 原生 workflow）
+- Windows：x64，NSIS setup.exe（Windows 原生 workflow）
 - 产物目录：`build/installers/<版本>/<平台>/`
 - 完整性校验：每个产物目录中的 `SHA256SUMS.txt`
 
@@ -20,13 +20,13 @@ npm run release:mac
 校验下载文件：
 
 ```bash
-cd build/installers/0.1.0/macos-arm64
+cd build/installers/0.1.1/macos-arm64
 shasum -a 256 -c SHA256SUMS.txt
 ```
 
 ## Windows 构建
 
-权威 Windows 包通过 GitHub Actions 的 `Desktop installers` 手动 workflow 在 `windows-latest` 生成。该流程同时产出 NSIS EXE、MSI 和哈希清单。
+权威 Windows 包通过 GitHub Actions 的 `Desktop installers` workflow 在 `windows-latest` 生成。手动触发可生成临时 Artifact；推送与应用版本一致的 `v*` 标签会在 macOS、Windows 均成功后创建 GitHub Release。Windows 正式资产为经过 PE x64 校验的 NSIS EXE 和哈希清单，不依赖 WiX MSI。
 
 Mac 可安装 `cargo-xwin`、Homebrew LLVM 与 NSIS 后尝试交叉生成 NSIS 测试包：
 
@@ -42,7 +42,7 @@ npm run release:windows:cross
 PowerShell 校验示例：
 
 ```powershell
-Get-FileHash .\StockTradingAssistant_0.1.0_windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\StockTradingAssistant_0.1.1_windows-x64-setup.exe -Algorithm SHA256
 ```
 
 ## 更换 API 地址
@@ -63,9 +63,9 @@ VITE_API_URL=https://your-domain.example npm run release:mac
 4. 分别在干净的 macOS 与 Windows 真机测试安装、卸载、登录、行情、持仓盈亏、老板键和透明小窗。
 5. 按 `SHA256SUMS.txt` 校验上传和下载后的安装包。
 
-## 本次 0.1.0 验证记录
+## 发布验证记录
 
-- macOS：DMG 与 APP ZIP 已生成；云 API、SHA-256、DMG、arm64 架构、ad-hoc 签名结构及本机启动已验证。
-- Windows：Mac 交叉构建的 x64 NSIS 已生成；云 API、SHA-256、NSIS PE 格式、内部应用 x86-64 与 Windows GUI subsystem 已验证。
-- 尚未执行：Windows 原生 workflow 的 MSI/NSIS 构建，以及 Windows 真机安装和业务功能验收。
-- 两个平台均未配置正式发行证书；这些文件只作为内部测试包，不应直接公开发布。
+- `v0.1.0`：macOS DMG/APP ZIP 构建成功；Windows 原生 Runner 已成功生成 NSIS EXE，但随后 WiX MSI `light.exe` 失败，因此该次 workflow 未创建 Release。
+- `v0.1.1`：移除非必要 MSI 阻断，Windows 权威安装包调整为 NSIS EXE；标签构建完成后需核验 GitHub Release 的 5 项资产及两份 SHA-256 清单。
+- 尚未执行：Windows 真机安装、卸载和业务功能验收。
+- 两个平台均未配置正式发行证书；Release 属于预览/测试版本，安装时可能出现系统安全警告。

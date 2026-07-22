@@ -2,7 +2,7 @@
 
 仓库已有 `Desktop installers` workflow，可在 GitHub 托管的 macOS 与 Windows Runner 上分别构建安装包，并上传为 Actions Artifact。当前流程仅支持 `workflow_dispatch`，且 `contents: read`，因此产物有保留期、没有稳定下载链接，也无法形成面向 ToC 用户的正式版本。
 
-本次发布仍使用应用真实版本 `0.1.0`，安装包内嵌生产 API `https://211.159.158.165`。Windows 必须由 Windows Runner 生成，macOS ARM64 必须由 macOS Runner 生成。
+正式修复版本使用应用真实版本 `0.1.1`，安装包内嵌生产 API `https://211.159.158.165`。Windows 必须由 Windows Runner 生成 NSIS EXE，macOS ARM64 必须由 macOS Runner 生成 DMG 与 APP ZIP。首次 `v0.1.0` 构建证明 NSIS 成功但 WiX MSI 失败，因此 MSI 不再作为面向用户发布的阻断资产。
 
 ## Goals / Non-Goals
 
@@ -17,6 +17,7 @@
 
 - 不增加自动更新器、代码签名证书或 Apple 公证。
 - 不生成 Intel macOS 安装包或 Windows ARM 安装包。
+- 不生成 Windows MSI；Windows 用户使用 NSIS EXE 安装包。
 - 不修改业务功能、后端部署或用户数据。
 
 ## Decisions
@@ -33,14 +34,14 @@
 - [macOS 使用 ad-hoc 签名，未做 Apple 公证，首次打开可能触发系统安全提示] → Release 说明明确该限制，后续获取 Developer ID 后再补正式签名与公证。
 - [GitHub 托管 Runner 或依赖源临时故障导致构建失败] → Release job 受 `needs` 保护，不产生半成品；可重跑失败任务。
 - [重复推送已存在标签] → 禁止覆盖标签；需要修复时提升应用版本并创建新标签。
-- [同名 SHA256SUMS 文件冲突] → 资产收集脚本按平台根目录查找并复制为带平台后缀的唯一文件名，上传前验证总数严格等于 6。
-- [Release 上传中断或任务重跑] → 未完成版本始终保持 draft；重跑对 draft 使用 `--clobber`，远端六项资产严格一致后才解除 draft。已正式发布且资产一致时直接成功退出。
+- [同名 SHA256SUMS 文件冲突] → 资产收集脚本按平台根目录查找并复制为带平台后缀的唯一文件名，上传前验证总数严格等于 5。
+- [Release 上传中断或任务重跑] → 未完成版本始终保持 draft；重跑对 draft 使用 `--clobber`，远端五项资产严格一致后才解除 draft。已正式发布且资产一致时直接成功退出。
 
 ## Migration Plan
 
 1. 更新并验证 workflow 语法与发布守卫测试。
 2. 将发布流程提交并合并到 `main`。
-3. 在 `main` 当前提交创建不可变标签 `v0.1.0` 并推送。
+3. 在 `main` 当前提交创建不可变标签 `v0.1.1` 并推送；保留失败的 `v0.1.0` 标签作为构建记录。
 4. 等待两个平台构建及发布任务成功，核验 Release 资产和校验和。
 5. 如构建失败，不创建 Release；修复后删除未发布的远端标签需用户明确批准，默认改用新补丁版本。
 

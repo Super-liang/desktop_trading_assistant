@@ -15,7 +15,7 @@
 - **THEN** macOS 和 Windows 安装包均嵌入 `https://211.159.158.165`
 
 ### Requirement: 发布完整平台资产
-系统 MUST 在两个平台构建和验证全部成功后创建对应标签的 GitHub Release，并上传 DMG、APP ZIP、Windows EXE、Windows MSI 及平台校验和文件。
+系统 MUST 在两个平台构建和验证全部成功后创建对应标签的 GitHub Release，并上传 DMG、APP ZIP、Windows NSIS EXE 及平台校验和文件。
 
 #### Scenario: 两个平台构建成功
 - **WHEN** macOS 与 Windows 构建、架构检查、API 地址检查和哈希生成全部成功

@@ -56,8 +56,8 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
       - run: npm ci
-      - name: Build Windows NSIS and MSI installers
-        run: npm --workspace apps/desktop run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis,msi
+      - name: Build Windows NSIS installer
+        run: npm --workspace apps/desktop run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis
       - name: Verify cloud API in frontend
         shell: bash
         run: deploy/desktop/verify-frontend-api.sh apps/desktop/dist "${VITE_API_URL}"
@@ -69,18 +69,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path $output | Out-Null
           $bundle = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
           $exe = Get-ChildItem "$bundle/nsis/*setup.exe" | Select-Object -First 1
-          $msi = Get-ChildItem "$bundle/msi/*.msi" | Select-Object -First 1
-          if (-not $exe -or -not $msi) { throw "Tauri did not produce both NSIS and MSI installers" }
+          if (-not $exe) { throw "Tauri did not produce the NSIS installer" }
           $appExe = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/trading-assistant.exe"
           $bytes = [System.IO.File]::ReadAllBytes($appExe)
           $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
           $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
           if ($machine -ne 0x8664) { throw "Desktop executable is not x86_64 PE" }
           $exeOut = "$output/StockTradingAssistant_${version}_windows-x64-setup.exe"
-          $msiOut = "$output/StockTradingAssistant_${version}_windows-x64.msi"
           Copy-Item $exe.FullName $exeOut
-          Copy-Item $msi.FullName $msiOut
-          $lines = @($exeOut, $msiOut) | ForEach-Object {
+          $lines = @($exeOut) | ForEach-Object {
             $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $(Split-Path $_ -Leaf)"
           }
