@@ -15,24 +15,11 @@ json_field() {
   python3 -c "import json,sys; print(json.load(sys.stdin)['${field}'])"
 }
 
-restore_market_config() {
-  local restored
-  restored=$(curl --fail --silent --show-error --max-time 20 -X PUT \
-    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-    -H 'Content-Type: application/json' \
-    --data "${ORIGINAL_MARKET_CONFIG}" \
-    "${BASE_URL}/api/v1/admin/market-data/config")
-  printf '%s' "${restored}" | python3 -c \
-    "import json,sys; expected=json.loads(sys.argv[1]); actual=json.load(sys.stdin); assert all(actual[k] == v for k,v in expected.items())" \
-    "${ORIGINAL_MARKET_CONFIG}"
-}
-
 TEST_SUFFIX=$(date -u +%Y%m%d%H%M%S)-$(openssl rand -hex 4)
 TEST_EMAIL=verify-${TEST_SUFFIX}@example.invalid
 TEST_PASSWORD=VerifyAa1-${TEST_SUFFIX}
 USER_TOKEN=
 ITEM_ID=
-ORIGINAL_MARKET_CONFIG=
 
 cleanup() {
   if [[ -n ${USER_TOKEN} && -n ${ITEM_ID} ]]; then
@@ -46,13 +33,6 @@ cleanup() {
       -H 'Content-Type: application/json' \
       --data "{\"password\":\"${TEST_PASSWORD}\"}" \
       "${BASE_URL}/api/v1/me" >/dev/null || true
-  fi
-  if [[ -n ${ORIGINAL_MARKET_CONFIG} && -n ${ADMIN_TOKEN:-} ]]; then
-    curl --silent --max-time 20 -X PUT \
-      -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-      -H 'Content-Type: application/json' \
-      --data "${ORIGINAL_MARKET_CONFIG}" \
-      "${BASE_URL}/api/v1/admin/market-data/config" >/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -68,19 +48,13 @@ curl --fail --silent --show-error --max-time 20 \
   "${BASE_URL}/api/v1/admin/users?size=5" \
   | python3 -c "import json,sys; assert json.load(sys.stdin)['totalElements'] >= 1"
 
-# 验收期间临时切到东财单股模式，避免全市场 Redis 在非交易时段尚无首份快照。
+# 保持生产行情配置不变。发布验收使用 Redis 中最后一份真实快照，避免临时上游
+# 单股接口抖动导致健康的新版本被错误回滚。
 CURRENT_MARKET_CONFIG=$(curl --fail --silent --show-error --max-time 20 \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   "${BASE_URL}/api/v1/market-data/config")
-ORIGINAL_MARKET_CONFIG=$(printf '%s' "${CURRENT_MARKET_CONFIG}" | python3 -c \
-  "import json,sys; d=json.load(sys.stdin); print(json.dumps({k:d[k] for k in ('provider','mode','snapshotSource','singleSource','refreshSeconds')}))")
-SINGLE_MARKET_CONFIG=$(printf '%s' "${ORIGINAL_MARKET_CONFIG}" | python3 -c \
-  "import json,sys; d=json.load(sys.stdin); d['mode']='SINGLE_STOCK'; d['singleSource']='EASTMONEY'; print(json.dumps(d))")
-curl --fail --silent --show-error --max-time 20 -X PUT \
-  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  --data "${SINGLE_MARKET_CONFIG}" \
-  "${BASE_URL}/api/v1/admin/market-data/config" >/dev/null
+printf '%s' "${CURRENT_MARKET_CONFIG}" | python3 -c \
+  "import json,sys; d=json.load(sys.stdin); assert d['provider']=='AKSHARE_CONFIGURED'"
 
 REGISTER=$(curl --fail --silent --show-error --max-time 20 \
   -H 'Content-Type: application/json' \
@@ -101,7 +75,7 @@ curl --fail --silent --show-error --max-time 20 \
 curl --fail --silent --show-error --max-time 90 \
   -H "Authorization: Bearer ${USER_TOKEN}" \
   "${BASE_URL}/api/v1/quotes/snapshots?symbols=SSE%3A600519" \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)==1; q=d[0]; assert q['instrumentId']=='SSE:600519' and q['source']=='AKSHARE_EASTMONEY_SINGLE' and not q['demo'] and float(q['last'])>0"
+  | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)==1; q=d[0]; assert q['instrumentId']=='SSE:600519' and q['source'].startswith('AKSHARE_') and not q['demo'] and float(q['last'])>0 and q['sourceTimestamp']"
 
 ITEM=$(curl --fail --silent --show-error --max-time 90 \
   -H "Authorization: Bearer ${USER_TOKEN}" \
@@ -114,8 +88,6 @@ curl --fail --silent --show-error --max-time 90 \
   "${BASE_URL}/api/v1/portfolio/items" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d['items'])==1 and float(d['totalMarketValue'])>0 and d['totalProfit'] is not None"
 
-restore_market_config
-ORIGINAL_MARKET_CONFIG=
 cleanup
 USER_TOKEN=
 ITEM_ID=
