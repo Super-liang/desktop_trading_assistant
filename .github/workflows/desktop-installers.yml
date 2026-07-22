@@ -81,7 +81,9 @@ jobs:
             $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $(Split-Path $_ -Leaf)"
           }
-          $lines | Set-Content "$output/SHA256SUMS.txt" -Encoding ascii
+          $checksumText = ($lines -join "`n") + "`n"
+          [System.IO.File]::WriteAllText(
+            "$output/SHA256SUMS.txt", $checksumText, [System.Text.Encoding]::ASCII)
       - uses: actions/upload-artifact@v4
         with:
           name: StockTradingAssistant-windows-x64

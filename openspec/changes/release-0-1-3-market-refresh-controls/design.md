@@ -66,7 +66,7 @@
 
 ### 7. 版本与发布
 
-桌面端 package、Cargo 与 Tauri 配置统一升级为 0.1.3。发布前先在本机 PostgreSQL、Redis、AKShare 和可见 Terminal 服务中验证，再构建 macOS 安装包进行真实登录冒烟；随后部署云端后端并构建 Windows/macOS 安装包发布到 GitHub。
+桌面端 package、Cargo 与 Tauri 配置统一升级为 0.1.3。发布前先在本机 PostgreSQL、Redis、AKShare 和可见 Terminal 服务中验证，再构建 macOS 安装包进行真实登录冒烟；随后部署云端后端并构建 Windows/macOS 安装包发布到 GitHub。两个平台的 SHA-256 清单必须使用跨平台 LF 换行，使 macOS、Linux 和 Windows 用户均可直接验证下载资产。
 
 ### 8. 主窗口使用固定可视区与局部滚动
 
