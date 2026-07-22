@@ -32,7 +32,8 @@ export type PortfolioItem = {
   quantity: number;
   costPrice: number;
   sortOrder: number;
-  quote: Quote | null;
+  // 后端启用 NON_NULL 序列化后，无行情时字段可能被直接省略。
+  quote?: Quote | null;
   marketValue: number | null;
   profit: number | null;
   returnPercent: number | null;
@@ -75,7 +76,7 @@ export type MarketDataConfig = {
 };
 
 export type MarketDataComponentStatus = {
-  id: "SPRING_API" | "AKSHARE_GATEWAY" | "REDIS_SNAPSHOT" | "UPSTREAM";
+  id: string;
   label: string;
   status: "UP" | "DEGRADED" | "DOWN" | "UNKNOWN" | "NOT_APPLICABLE";
   lastSuccessAt?: string;

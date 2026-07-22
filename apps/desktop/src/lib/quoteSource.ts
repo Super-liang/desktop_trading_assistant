@@ -28,7 +28,9 @@ export function summarizeQuoteSource(
     };
   }
 
-  const quotes = items.map((item) => item.quote).filter((quote) => quote !== null);
+  const quotes = items
+    .map((item) => item.quote)
+    .filter((quote): quote is NonNullable<PortfolioItem["quote"]> => quote != null);
   if (!quotes.length) {
     return {
       badge: "WAIT",

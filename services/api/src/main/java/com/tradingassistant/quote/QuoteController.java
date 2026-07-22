@@ -1,6 +1,7 @@
 package com.tradingassistant.quote;
 
 import com.tradingassistant.config.AppProperties;
+import com.tradingassistant.marketdata.MarketDataConfig;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
@@ -30,8 +31,12 @@ public class QuoteController {
     }
 
     @GetMapping("/snapshots")
-    List<Quote> snapshots(@RequestParam List<String> symbols) {
-        return registry.snapshots(parse(symbols));
+    List<Quote> snapshots(@RequestParam List<String> symbols,
+            @RequestParam(required = false) MarketDataConfig.Mode mode,
+            @RequestParam(required = false) MarketDataConfig.SnapshotSource snapshotSource,
+            @RequestParam(required = false) MarketDataConfig.SingleSource singleSource) {
+        return registry.snapshots(parse(symbols),
+                new QuoteRequestOptions(mode, snapshotSource, singleSource));
     }
 
     @GetMapping("/providers")
@@ -40,14 +45,18 @@ public class QuoteController {
     }
 
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    SseEmitter stream(@RequestParam List<String> symbols) {
+    SseEmitter stream(@RequestParam List<String> symbols,
+            @RequestParam(required = false) MarketDataConfig.Mode mode,
+            @RequestParam(required = false) MarketDataConfig.SnapshotSource snapshotSource,
+            @RequestParam(required = false) MarketDataConfig.SingleSource singleSource) {
         List<InstrumentId> instruments = parse(symbols);
         SseEmitter emitter = new SseEmitter(0L);
         ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(() -> {
             try {
                 emitter.send(SseEmitter.event()
                         .name("quotes")
-                        .data(registry.snapshots(instruments)));
+                        .data(registry.snapshots(instruments,
+                                new QuoteRequestOptions(mode, snapshotSource, singleSource))));
             } catch (IOException | QuoteUnavailableException exception) {
                 emitter.completeWithError(exception);
             }

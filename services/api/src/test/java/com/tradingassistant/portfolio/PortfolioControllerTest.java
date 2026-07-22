@@ -55,18 +55,27 @@ class PortfolioControllerTest {
         when(repository.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(userId))
                 .thenReturn(List.of(first, second));
         Instant now = Instant.now();
-        when(quotes.snapshots(anyList())).thenReturn(List.of(new Quote("SSE:600519", "贵州茅台",
+        when(quotes.snapshots(anyList(), any())).thenReturn(List.of(new Quote("SSE:600519", "贵州茅台",
                 new BigDecimal("11"), BigDecimal.TEN, BigDecimal.TEN, new BigDecimal("11"),
                 BigDecimal.TEN, BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ONE, "CONTINUOUS",
                 "AKSHARE_SINA_SNAPSHOT", now, now, true, false, false)));
         PortfolioController controller = new PortfolioController(repository, quotes, catalog);
 
-        PortfolioController.PortfolioSummary result = controller.list(jwt);
+        PortfolioController.PortfolioSummary result = controller.list(
+                jwt, com.tradingassistant.marketdata.MarketDataConfig.Mode.MARKET_SNAPSHOT,
+                com.tradingassistant.marketdata.MarketDataConfig.SnapshotSource.SINA,
+                com.tradingassistant.marketdata.MarketDataConfig.SingleSource.XUEQIU);
 
         assertThat(result.items()).hasSize(2);
         assertThat(result.items().get(0).quote()).isNotNull();
         assertThat(result.items().get(1).quote()).isNull();
         assertThat(result.items().get(1).marketValue()).isNull();
         assertThat(result.unavailableQuoteCount()).isEqualTo(1);
+        verify(quotes).snapshots(anyList(), argThat(options ->
+                options.mode() == com.tradingassistant.marketdata.MarketDataConfig.Mode.MARKET_SNAPSHOT
+                && options.snapshotSource()
+                        == com.tradingassistant.marketdata.MarketDataConfig.SnapshotSource.SINA
+                && options.singleSource()
+                        == com.tradingassistant.marketdata.MarketDataConfig.SingleSource.XUEQIU));
     }
 }

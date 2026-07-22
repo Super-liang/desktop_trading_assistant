@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { money } from "../lib/format";
 import { summarizeQuoteSource } from "../lib/quoteSource";
+import { portfolioRefetchInterval, useMarketPreferences } from "../lib/marketPreferences";
 import {
   normalizeTickerTextOpacity,
   readTickerTextOpacity,
@@ -26,7 +27,22 @@ async function hide() {
 }
 
 export function TickerWindow() {
-  const portfolio = useQuery({ queryKey: ["portfolio"], queryFn: api.portfolio, refetchInterval: 2000 });
+  const marketConfig = useQuery({
+    queryKey: ["market-data-config"], queryFn: api.marketDataConfig, refetchInterval: 30_000,
+  });
+  const preferences = useMarketPreferences(
+    marketConfig.data?.mode ?? "MARKET_SNAPSHOT",
+    marketConfig.data?.snapshotSource ?? "EASTMONEY",
+    marketConfig.data?.singleSource ?? "EASTMONEY",
+  );
+  const marketMode = preferences.mode;
+  const portfolio = useQuery({
+    queryKey: ["portfolio", preferences.snapshotSource, preferences.singleSource, marketMode],
+    queryFn: () => api.portfolio(marketMode,
+      preferences.snapshotSource, preferences.singleSource),
+    refetchInterval: portfolioRefetchInterval(marketMode, preferences.singleRefreshSeconds),
+    enabled: marketConfig.isSuccess,
+  });
   const [textOpacity, setTextOpacity] = useState(readTickerTextOpacity);
   const [layout, setLayout] = useState<{ scale: number; mode: TickerLayoutMode }>({
     scale: 1,

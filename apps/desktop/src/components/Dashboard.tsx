@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { money } from "../lib/format";
 import { summarizeQuoteSource } from "../lib/quoteSource";
+import { portfolioRefetchInterval, useMarketPreferences } from "../lib/marketPreferences";
 import { useAuth } from "../store/auth";
 import { AddPositionDialog } from "./AddPositionDialog";
 import { PortfolioTable } from "./PortfolioTable";
@@ -46,10 +47,23 @@ export function Dashboard() {
   const [editing, setEditing] = useState<PortfolioItem | null>(null);
   const [admin, setAdmin] = useState(false);
   const [marketDataSettings, setMarketDataSettings] = useState(false);
+  const marketConfig = useQuery({
+    queryKey: ["market-data-config"],
+    queryFn: api.marketDataConfig,
+    refetchInterval: 30_000,
+  });
+  const preferences = useMarketPreferences(
+    marketConfig.data?.mode ?? "MARKET_SNAPSHOT",
+    marketConfig.data?.snapshotSource ?? "EASTMONEY",
+    marketConfig.data?.singleSource ?? "EASTMONEY",
+  );
+  const marketMode = preferences.mode;
   const portfolio = useQuery({
-    queryKey: ["portfolio"],
-    queryFn: api.portfolio,
-    refetchInterval: 2000,
+    queryKey: ["portfolio", preferences.snapshotSource, preferences.singleSource, marketMode],
+    queryFn: () => api.portfolio(marketMode,
+      preferences.snapshotSource, preferences.singleSource),
+    refetchInterval: portfolioRefetchInterval(marketMode, preferences.singleRefreshSeconds),
+    enabled: marketConfig.isSuccess,
   });
 
   // App 会在会话清空后切回登录页；子组件可能先收到 store 更新，需安全结束本帧。
@@ -120,7 +134,7 @@ export function Dashboard() {
         </header>
         <div className="demo-banner"><span>{quoteSource.badge}</span>
           {quoteSource.notice}</div>
-        <MarketStatusLights />
+        <MarketStatusLights mode={marketMode} singleSource={preferences.singleSource} />
         <section className="summary-grid">
           <article className="summary-card featured"><small>持仓总市值</small>
             <strong>{noValuation ? "--" : `¥ ${money(data?.totalMarketValue ?? 0)}`}</strong>
@@ -131,7 +145,9 @@ export function Dashboard() {
             <span>{data?.unavailableQuoteCount ? `${data.unavailableQuoteCount} 只证券未计入` : "不含费用与税费"}</span></article>
           <article className="summary-card"><small>数据状态</small><strong className="status-live">
             <i /> {quoteSource.status}</strong>
-            <span>每 2 秒刷新 · 来源可追溯</span></article>
+            <span>{marketMode === "MARKET_SNAPSHOT"
+              ? `服务端快照刷新频率：${marketConfig.data?.refreshSeconds ?? "--"} 秒`
+              : `客户端查询频率：${preferences.singleRefreshSeconds} 秒`}</span></article>
         </section>
         <section className="list-card">
           <div className="section-title"><div><p className="eyebrow">WATCHLIST</p><h2>自选与持仓</h2></div>

@@ -11,6 +11,10 @@ const { portfolio } = vi.hoisted(() => ({ portfolio: vi.fn() }));
 vi.mock("../lib/api", () => ({
   api: {
     portfolio,
+    marketDataConfig: vi.fn().mockResolvedValue({
+      provider: "AKSHARE", mode: "MARKET_SNAPSHOT", snapshotSource: "EASTMONEY",
+      singleSource: "EASTMONEY", refreshSeconds: 30, updatedAt: "", providers: [],
+    }),
   },
 }));
 
@@ -139,5 +143,14 @@ describe("TickerWindow", () => {
     });
     expect(ticker?.style.getPropertyValue("--ticker-ui-scale")).toBe("0.7");
     expect(ticker).toHaveAttribute("data-layout", "narrow");
+  });
+
+  it("透明小窗按本机单股来源请求", async () => {
+    window.localStorage.setItem("market.singleSource", "XUEQIU");
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><TickerWindow /></QueryClientProvider>);
+
+    await waitFor(() => expect(portfolio).toHaveBeenCalledWith(
+      "MARKET_SNAPSHOT", "EASTMONEY", "XUEQIU"));
   });
 });

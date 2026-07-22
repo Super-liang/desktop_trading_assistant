@@ -11,6 +11,9 @@ public interface QuoteProvider {
     Set<InstrumentId.Exchange> exchanges();
     List<InstrumentSearchResult> search(String query);
     List<Quote> snapshots(List<InstrumentId> instruments);
+    default List<Quote> snapshots(List<InstrumentId> instruments, QuoteRequestOptions options) {
+        return snapshots(instruments);
+    }
     default Capabilities capabilities() {
         return new Capabilities(exchanges(), true, true, false, 50,
                 demo() ? "DEMO_ONLY" : "LICENSE_REQUIRED");

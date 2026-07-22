@@ -56,17 +56,28 @@ public class AkshareConfiguredQuoteProvider implements QuoteProvider {
 
     @Override
     public List<Quote> snapshots(List<InstrumentId> instruments) {
+        return snapshots(instruments, QuoteRequestOptions.DEFAULT);
+    }
+
+    @Override
+    public List<Quote> snapshots(List<InstrumentId> instruments, QuoteRequestOptions options) {
         MarketDataConfig config = configService.current();
-        if (config.getMode() == MarketDataConfig.Mode.MARKET_SNAPSHOT) {
-            return snapshots.find(config.getSnapshotSource(), instruments);
+        MarketDataConfig.Mode mode = options != null && options.mode() != null
+                ? options.mode() : config.getMode();
+        if (mode == MarketDataConfig.Mode.MARKET_SNAPSHOT) {
+            MarketDataConfig.SnapshotSource source = options != null && options.snapshotSource() != null
+                    ? options.snapshotSource() : config.getSnapshotSource();
+            return snapshots.find(source, instruments);
         }
+        MarketDataConfig.SingleSource source = options != null && options.singleSource() != null
+                ? options.singleSource() : config.getSingleSource();
         List<InstrumentId> supported = instruments;
-        if (config.getSingleSource() == MarketDataConfig.SingleSource.EASTMONEY) {
+        if (source == MarketDataConfig.SingleSource.EASTMONEY) {
             supported = instruments.stream()
                     .filter(item -> item.exchange() != InstrumentId.Exchange.BSE).toList();
         }
         if (supported.isEmpty()) return List.of();
-        return gateway.singleQuotes(config.getSingleSource(), supported);
+        return gateway.singleQuotes(source, supported);
     }
 
     @Override

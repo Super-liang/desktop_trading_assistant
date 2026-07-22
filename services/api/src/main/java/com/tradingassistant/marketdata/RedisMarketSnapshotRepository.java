@@ -21,7 +21,6 @@ public class RedisMarketSnapshotRepository {
     private static final Logger log = LoggerFactory.getLogger(RedisMarketSnapshotRepository.class);
     private static final String PREFIX = "trading:quotes:akshare:snapshot:";
     private static final String METADATA_FIELD = "__metadata__";
-    private static final String REFRESH_LOCK = PREFIX + "refresh-lock";
     private static final DefaultRedisScript<Long> RELEASE_LOCK = new DefaultRedisScript<>(
             "if redis.call('get', KEYS[1]) == ARGV[1] then "
                     + "return redis.call('del', KEYS[1]) else return 0 end",
@@ -189,17 +188,18 @@ public class RedisMarketSnapshotRepository {
         }
     }
 
-    public Optional<String> acquireRefreshLock(int refreshSeconds) {
+    public Optional<String> acquireRefreshLock(MarketDataConfig.SnapshotSource source,
+            int refreshSeconds) {
         String token = UUID.randomUUID().toString();
         Boolean acquired = redis.opsForValue().setIfAbsent(
-                REFRESH_LOCK, token,
+                refreshLockKey(source), token,
                 // 覆盖慢请求和多实例时钟偏差，避免一次刷新未结束时另一实例重复抓取。
                 Duration.ofSeconds(Math.max(60, refreshSeconds * 2L)));
         return Boolean.TRUE.equals(acquired) ? Optional.of(token) : Optional.empty();
     }
 
-    public void releaseRefreshLock(String token) {
-        redis.execute(RELEASE_LOCK, List.of(REFRESH_LOCK), token);
+    public void releaseRefreshLock(MarketDataConfig.SnapshotSource source, String token) {
+        redis.execute(RELEASE_LOCK, List.of(refreshLockKey(source)), token);
     }
 
     public boolean ping() {
@@ -215,6 +215,10 @@ public class RedisMarketSnapshotRepository {
 
     private String metaKey(MarketDataConfig.SnapshotSource source) {
         return dataKey(source) + ":meta";
+    }
+
+    private String refreshLockKey(MarketDataConfig.SnapshotSource source) {
+        return dataKey(source) + ":refresh-lock";
     }
 
     public record SnapshotMetadata(String source, Instant fetchedAt, int quoteCount) {}

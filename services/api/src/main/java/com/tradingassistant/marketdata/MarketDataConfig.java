@@ -39,7 +39,7 @@ public class MarketDataConfig {
         config.mode = Mode.MARKET_SNAPSHOT;
         config.snapshotSource = SnapshotSource.EASTMONEY;
         config.singleSource = SingleSource.EASTMONEY;
-        config.refreshSeconds = 10;
+        config.refreshSeconds = 30;
         config.updatedAt = Instant.now();
         return config;
     }

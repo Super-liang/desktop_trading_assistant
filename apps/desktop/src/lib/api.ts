@@ -75,7 +75,15 @@ export const api = {
   logoutAll: () => request<void>("/api/v1/me/logout-all", { method: "POST" }),
   deleteAccount: (password: string) =>
     request<void>("/api/v1/me", { method: "DELETE", body: JSON.stringify({ password }) }),
-  portfolio: () => request<PortfolioSummary>("/api/v1/portfolio/items"),
+  portfolio: (mode?: MarketDataConfig["mode"], snapshotSource?: MarketDataConfig["snapshotSource"],
+    singleSource?: MarketDataConfig["singleSource"]) => {
+    const query = new URLSearchParams();
+    if (mode) query.set("mode", mode);
+    if (snapshotSource) query.set("snapshotSource", snapshotSource);
+    if (singleSource) query.set("singleSource", singleSource);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return request<PortfolioSummary>(`/api/v1/portfolio/items${suffix}`);
+  },
   search: (query: string, signal?: AbortSignal) =>
     request<SearchResult[]>(`/api/v1/instruments/search?query=${encodeURIComponent(query)}`,
       { signal }, true, 8_000),
@@ -99,5 +107,12 @@ export const api = {
     request<MarketDataConfig>("/api/v1/admin/market-data/config", {
       method: "PUT", body: JSON.stringify(body),
     }),
-  marketDataStatus: () => request<MarketDataStatus>("/api/v1/market-data/status"),
+  marketDataStatus: (mode?: MarketDataConfig["mode"],
+    singleSource?: MarketDataConfig["singleSource"]) => {
+    const query = new URLSearchParams();
+    if (mode) query.set("mode", mode);
+    if (singleSource) query.set("singleSource", singleSource);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return request<MarketDataStatus>(`/api/v1/market-data/status${suffix}`);
+  },
 };

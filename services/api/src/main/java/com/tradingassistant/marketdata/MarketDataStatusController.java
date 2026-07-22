@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -23,8 +24,11 @@ public class MarketDataStatusController {
     }
 
     @GetMapping("/api/v1/market-data/status")
-    public StatusView status() {
+    public StatusView status(
+            @RequestParam(required = false) MarketDataConfig.Mode mode,
+            @RequestParam(required = false) MarketDataConfig.SingleSource singleSource) {
         MarketDataConfig config = configs.current();
+        MarketDataConfig.Mode selectedMode = mode == null ? config.getMode() : mode;
         List<ComponentStatus> components = new ArrayList<>();
         components.add(new ComponentStatus("SPRING_API", "Spring API", "UP",
                 Instant.now(), 0L, "服务正常"));
@@ -38,48 +42,69 @@ public class MarketDataStatusController {
                     null, null, exception.getClass().getSimpleName()));
         }
 
-        if (config.getMode() == MarketDataConfig.Mode.SINGLE_STOCK) {
+        if (selectedMode == MarketDataConfig.Mode.SINGLE_STOCK) {
             components.add(new ComponentStatus("REDIS_SNAPSHOT", "Redis 快照",
                     "NOT_APPLICABLE", null, null, "单股模式不使用全市场缓存"));
         } else {
+            boolean redisUp;
             try {
-                boolean ping = snapshots.ping();
-                var metadata = snapshots.metadata(config.getSnapshotSource());
-                if (!ping) throw new IllegalStateException("Redis 未响应 PONG");
-                if (metadata.isEmpty()) {
-                    components.add(new ComponentStatus("REDIS_SNAPSHOT", "Redis 快照",
-                            "UNKNOWN", null, null, "等待首次快照"));
-                } else {
-                    Instant now = Instant.now();
-                    long age = Math.max(0, Duration.between(metadata.get().fetchedAt(), now).toSeconds());
-                    boolean overdueDuringTrading = MarketSnapshotScheduler.isTradingTime(now)
-                            && age > config.getRefreshSeconds() * 2L;
-                    String state = overdueDuringTrading ? "DEGRADED" : "UP";
-                    components.add(new ComponentStatus("REDIS_SNAPSHOT", "Redis 快照", state,
-                            metadata.get().fetchedAt(), age, metadata.get().quoteCount() + " 只证券"));
-                }
+                redisUp = snapshots.ping();
             } catch (RuntimeException exception) {
-                components.add(new ComponentStatus("REDIS_SNAPSHOT", "Redis 快照", "DOWN",
-                        null, null, exception.getClass().getSimpleName()));
+                redisUp = false;
+            }
+            for (MarketDataConfig.SnapshotSource source : MarketDataConfig.SnapshotSource.values()) {
+                components.add(snapshotStatus(config, source, redisUp));
             }
         }
 
-        String sourceId = config.getMode() == MarketDataConfig.Mode.MARKET_SNAPSHOT
-                ? "SNAPSHOT_" + config.getSnapshotSource().name()
-                : "SINGLE_" + config.getSingleSource().name();
+        MarketDataConfig.SingleSource selectedSingleSource = singleSource == null
+                ? config.getSingleSource() : singleSource;
+        List<String> sourceIds = selectedMode == MarketDataConfig.Mode.MARKET_SNAPSHOT
+                ? java.util.Arrays.stream(MarketDataConfig.SnapshotSource.values())
+                        .map(source -> "SNAPSHOT_" + source.name()).toList()
+                : List.of("SINGLE_" + selectedSingleSource.name());
         try {
-            AkshareGatewayClient.SourceHealth selected = gateway.sourceStatus().stream()
-                    .filter(item -> sourceId.equals(item.source())).findFirst().orElse(null);
-            components.add(selected == null
-                    ? new ComponentStatus("UPSTREAM", sourceId, "UNKNOWN", null, null, "尚未调用")
-                    : new ComponentStatus("UPSTREAM", sourceId, selected.status(),
-                            selected.lastSuccessAt(), null,
-                            selected.errorType() == null ? selected.latencyMillis() + " ms" : selected.errorType()));
+            List<AkshareGatewayClient.SourceHealth> statuses = gateway.sourceStatus();
+            for (String sourceId : sourceIds) {
+                AkshareGatewayClient.SourceHealth selected = statuses.stream()
+                        .filter(item -> sourceId.equals(item.source())).findFirst().orElse(null);
+                components.add(selected == null
+                        ? new ComponentStatus("UPSTREAM_" + sourceId, sourceId, "UNKNOWN",
+                                null, null, "尚未调用")
+                        : new ComponentStatus("UPSTREAM_" + sourceId, sourceId, selected.status(),
+                                selected.lastSuccessAt(), null,
+                                selected.errorType() == null
+                                        ? selected.latencyMillis() + " ms" : selected.errorType()));
+            }
         } catch (RuntimeException exception) {
-            components.add(new ComponentStatus("UPSTREAM", sourceId, "UNKNOWN",
-                    null, null, "网关状态不可用"));
+            for (String sourceId : sourceIds) {
+                components.add(new ComponentStatus("UPSTREAM_" + sourceId, sourceId, "UNKNOWN",
+                        null, null, "网关状态不可用"));
+            }
         }
-        return new StatusView(config.getMode(), components, Instant.now());
+        return new StatusView(selectedMode, components, Instant.now());
+    }
+
+    private ComponentStatus snapshotStatus(MarketDataConfig config,
+            MarketDataConfig.SnapshotSource source, boolean redisUp) {
+        String id = "REDIS_SNAPSHOT_" + source.name();
+        String label = "Redis " + (source == MarketDataConfig.SnapshotSource.SINA ? "新浪" : "东财");
+        try {
+            if (!redisUp) throw new IllegalStateException("Redis 未响应 PONG");
+            var metadata = snapshots.metadata(source);
+            if (metadata.isEmpty()) {
+                return new ComponentStatus(id, label, "UNKNOWN", null, null, "等待首次快照");
+            }
+            Instant now = Instant.now();
+            long age = Math.max(0, Duration.between(metadata.get().fetchedAt(), now).toSeconds());
+            boolean overdueDuringTrading = MarketSnapshotScheduler.isTradingTime(now)
+                    && age > config.getRefreshSeconds() * 2L;
+            return new ComponentStatus(id, label, overdueDuringTrading ? "DEGRADED" : "UP",
+                    metadata.get().fetchedAt(), age, metadata.get().quoteCount() + " 只证券");
+        } catch (RuntimeException exception) {
+            return new ComponentStatus(id, label, "DOWN", null, null,
+                    exception.getClass().getSimpleName());
+        }
     }
 
     public record ComponentStatus(String id, String label, String status, Instant lastSuccessAt,

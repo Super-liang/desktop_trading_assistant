@@ -78,12 +78,19 @@ class RedisMarketSnapshotRepositoryIntegrationTest {
                 InstrumentId.parse("SSE:600519"), InstrumentId.parse("SZSE:000001"))))
                 .containsExactly(quote, second);
 
-        String firstToken = repository.acquireRefreshLock(10).orElseThrow();
-        assertThat(repository.acquireRefreshLock(10)).isEmpty();
-        repository.releaseRefreshLock("not-the-owner");
-        assertThat(repository.acquireRefreshLock(10)).isEmpty();
-        repository.releaseRefreshLock(firstToken);
-        assertThat(repository.acquireRefreshLock(10)).isPresent();
+        String firstToken = repository.acquireRefreshLock(
+                MarketDataConfig.SnapshotSource.EASTMONEY, 30).orElseThrow();
+        assertThat(repository.acquireRefreshLock(MarketDataConfig.SnapshotSource.EASTMONEY, 30))
+                .isEmpty();
+        assertThat(repository.acquireRefreshLock(MarketDataConfig.SnapshotSource.SINA, 30))
+                .isPresent();
+        repository.releaseRefreshLock(MarketDataConfig.SnapshotSource.EASTMONEY,
+                "not-the-owner");
+        assertThat(repository.acquireRefreshLock(MarketDataConfig.SnapshotSource.EASTMONEY, 30))
+                .isEmpty();
+        repository.releaseRefreshLock(MarketDataConfig.SnapshotSource.EASTMONEY, firstToken);
+        assertThat(repository.acquireRefreshLock(MarketDataConfig.SnapshotSource.EASTMONEY, 30))
+                .isPresent();
     }
 
     @Test

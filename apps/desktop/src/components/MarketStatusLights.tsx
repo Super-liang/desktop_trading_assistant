@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { MarketDataComponentStatus } from "../types";
+import type { MarketDataConfig } from "../types";
 
 const statusText: Record<MarketDataComponentStatus["status"], string> = {
   UP: "正常",
@@ -20,10 +21,14 @@ function statusSuffix(component: MarketDataComponentStatus) {
   return "";
 }
 
-export function MarketStatusLights({ compact = false }: { compact?: boolean }) {
+export function MarketStatusLights({ compact = false, mode, singleSource }: {
+  compact?: boolean;
+  mode?: MarketDataConfig["mode"];
+  singleSource?: MarketDataConfig["singleSource"];
+}) {
   const status = useQuery({
-    queryKey: ["market-data-status"],
-    queryFn: api.marketDataStatus,
+    queryKey: ["market-data-status", mode, singleSource],
+    queryFn: () => api.marketDataStatus(mode, singleSource),
     refetchInterval: 5000,
     retry: false,
   });

@@ -42,12 +42,16 @@ public class QuoteProviderRegistry {
     }
 
     public List<Quote> snapshots(List<InstrumentId> instruments) {
+        return snapshots(instruments, QuoteRequestOptions.DEFAULT);
+    }
+
+    public List<Quote> snapshots(List<InstrumentId> instruments, QuoteRequestOptions options) {
         if (instruments.isEmpty()) {
             return List.of();
         }
         Instant now = Instant.now();
         return execute(provider -> {
-            return provider.snapshots(instruments);
+            return provider.snapshots(instruments, options == null ? QuoteRequestOptions.DEFAULT : options);
         }, "snapshots").stream()
                 .map(quote -> {
                     boolean expired = quote.sourceTimestamp() == null

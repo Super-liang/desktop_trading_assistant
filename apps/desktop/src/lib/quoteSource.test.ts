@@ -74,4 +74,23 @@ describe("summarizeQuoteSource", () => {
     expect(summarizeQuoteSource([item(), { ...item(), id: "2", quote: null }]))
       .toMatchObject({ badge: "DEGRADED", status: "部分行情降级" });
   });
+
+  it("服务端省略 quote 字段时仍视为无行情", () => {
+    const missingQuote = {
+      id: "2",
+      instrumentId: "SZSE:000001",
+      displayName: "平安银行",
+      quantity: 100,
+      costPrice: 10,
+      sortOrder: 1,
+      marketValue: null,
+      profit: null,
+      returnPercent: null,
+    } as PortfolioItem;
+
+    expect(summarizeQuoteSource([item(), missingQuote])).toMatchObject({
+      badge: "DEGRADED",
+      status: "部分行情降级",
+    });
+  });
 });

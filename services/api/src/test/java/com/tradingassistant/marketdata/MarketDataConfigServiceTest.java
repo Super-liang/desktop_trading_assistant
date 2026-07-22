@@ -29,7 +29,7 @@ class MarketDataConfigServiceTest {
                 MarketDataConfig.Mode.SINGLE_STOCK,
                 MarketDataConfig.SnapshotSource.EASTMONEY,
                 MarketDataConfig.SingleSource.XUEQIU,
-                12));
+                30));
 
         assertThat(updated.getMode()).isEqualTo(MarketDataConfig.Mode.SINGLE_STOCK);
         assertThat(updated.getSingleSource()).isEqualTo(MarketDataConfig.SingleSource.XUEQIU);
@@ -37,18 +37,18 @@ class MarketDataConfigServiceTest {
     }
 
     @Test
-    void rejectsUnsafeSinaFrequencyWithoutPersistingOrAuditing() {
+    void rejectsUnsafeDualSourceFrequencyWithoutPersistingOrAuditing() {
         var service = new MarketDataConfigService(repository, audits);
 
         assertThatThrownBy(() -> service.update(UUID.randomUUID(),
                 new MarketDataConfigService.UpdateRequest(
                         MarketDataConfig.Provider.AKSHARE,
                         MarketDataConfig.Mode.MARKET_SNAPSHOT,
-                        MarketDataConfig.SnapshotSource.SINA,
+                        MarketDataConfig.SnapshotSource.EASTMONEY,
                         MarketDataConfig.SingleSource.EASTMONEY,
                         10)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("30 秒");
+                .hasMessageContaining("30");
         verifyNoInteractions(repository, audits);
     }
 }

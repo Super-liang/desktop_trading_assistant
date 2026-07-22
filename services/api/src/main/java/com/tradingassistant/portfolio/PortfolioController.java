@@ -2,6 +2,7 @@ package com.tradingassistant.portfolio;
 
 import com.tradingassistant.catalog.SecurityCatalogItem;
 import com.tradingassistant.catalog.SecurityCatalogService;
+import com.tradingassistant.marketdata.MarketDataConfig;
 import com.tradingassistant.quote.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -29,9 +30,12 @@ public class PortfolioController {
     }
 
     @GetMapping
-    PortfolioSummary list(@AuthenticationPrincipal Jwt jwt) {
+    PortfolioSummary list(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) MarketDataConfig.Mode mode,
+            @RequestParam(required = false) MarketDataConfig.SnapshotSource snapshotSource,
+            @RequestParam(required = false) MarketDataConfig.SingleSource singleSource) {
         List<PortfolioItem> owned = items.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(userId(jwt));
-        Map<String, Quote> latest = latestQuotes(owned);
+        Map<String, Quote> latest = latestQuotes(owned, mode, snapshotSource, singleSource);
         List<ItemView> views = owned.stream().map(item -> view(item, latest.get(item.canonical()))).toList();
         BigDecimal marketValue = views.stream().map(ItemView::marketValue).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -42,10 +46,14 @@ public class PortfolioController {
                 "不含手续费、税费、分红送转影响；合计仅包含有行情的证券");
     }
 
-    private Map<String, Quote> latestQuotes(List<PortfolioItem> owned) {
+    private Map<String, Quote> latestQuotes(List<PortfolioItem> owned,
+            MarketDataConfig.Mode mode,
+            MarketDataConfig.SnapshotSource snapshotSource,
+            MarketDataConfig.SingleSource singleSource) {
         try {
             return quotes.snapshots(owned.stream()
-                            .map(item -> InstrumentId.parse(item.canonical())).toList())
+                            .map(item -> InstrumentId.parse(item.canonical())).toList(),
+                            new QuoteRequestOptions(mode, snapshotSource, singleSource))
                     .stream().collect(java.util.stream.Collectors.toMap(
                             Quote::instrumentId, value -> value, (first, ignored) -> first));
         } catch (QuoteUnavailableException exception) {

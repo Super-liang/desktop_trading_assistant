@@ -37,12 +37,8 @@ public class MarketDataConfigService {
                 || request.snapshotSource() == null || request.singleSource() == null) {
             throw new IllegalArgumentException("行情源配置字段不能为空");
         }
-        if (request.refreshSeconds() < 5 || request.refreshSeconds() > 300) {
-            throw new IllegalArgumentException("刷新频率必须在 5 到 300 秒之间");
-        }
-        if (request.snapshotSource() == MarketDataConfig.SnapshotSource.SINA
-                && request.refreshSeconds() < 30) {
-            throw new IllegalArgumentException("新浪全市场接口刷新频率不能低于 30 秒");
+        if (request.refreshSeconds() < 30 || request.refreshSeconds() > 300) {
+            throw new IllegalArgumentException("双源全市场刷新频率必须在 30 到 300 秒之间");
         }
     }
 
