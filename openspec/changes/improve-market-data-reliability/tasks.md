@@ -32,4 +32,4 @@
 - [x] 5.2 独立执行 verification pass，验证 Redis 无 TTL、08:00 同步、非交易时段与端到端加自选
 - [x] 5.3 独立执行 code-review pass 并修复高优先级问题
 - [x] 5.4 发布云端服务、执行迁移和健康检查，确认真实行情与最后快照行为
-- [ ] 5.5 构建并发布更新后的 macOS 与 Windows 桌面安装包
+- [x] 5.5 构建并发布更新后的 macOS 与 Windows 桌面安装包
