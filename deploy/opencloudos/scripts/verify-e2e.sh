@@ -54,7 +54,7 @@ CURRENT_MARKET_CONFIG=$(curl --fail --silent --show-error --max-time 20 \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   "${BASE_URL}/api/v1/market-data/config")
 printf '%s' "${CURRENT_MARKET_CONFIG}" | python3 -c \
-  "import json,sys; d=json.load(sys.stdin); assert d['provider']=='AKSHARE_CONFIGURED'"
+  "import json,sys; d=json.load(sys.stdin); assert d['provider']=='AKSHARE'"
 
 REGISTER=$(curl --fail --silent --show-error --max-time 20 \
   -H 'Content-Type: application/json' \
