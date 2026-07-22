@@ -41,6 +41,8 @@ grep -F -q 'contents: write' .github/workflows/desktop-installers.yml
 grep -F -q 'GITHUB_REF_NAME' .github/workflows/desktop-installers.yml
 grep -F -q 'prepare-release-assets.sh' .github/workflows/desktop-installers.yml
 grep -F -q 'publish-github-release.sh' .github/workflows/desktop-installers.yml
+grep -F -q 'run: bash deploy/desktop/publish-github-release.sh "${GITHUB_REF_NAME}" "${RELEASE_VERSION}" publish' \
+  .github/workflows/desktop-installers.yml
 grep -F -q '$machine -ne 0x8664' .github/workflows/desktop-installers.yml
 grep -E -q 'actions/checkout@[0-9a-f]{40}' .github/workflows/desktop-installers.yml
 grep -E -q 'actions/download-artifact@[0-9a-f]{40}' .github/workflows/desktop-installers.yml

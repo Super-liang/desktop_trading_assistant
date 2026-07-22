@@ -115,5 +115,4 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash deploy/desktop/publish-github-release.sh \
-          "${GITHUB_REF_NAME}" "${RELEASE_VERSION}" publish
+        run: bash deploy/desktop/publish-github-release.sh "${GITHUB_REF_NAME}" "${RELEASE_VERSION}" publish
