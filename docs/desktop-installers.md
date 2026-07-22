@@ -66,6 +66,7 @@ VITE_API_URL=https://your-domain.example npm run release:mac
 ## 发布验证记录
 
 - `v0.1.0`：macOS DMG/APP ZIP 构建成功；Windows 原生 Runner 已成功生成 NSIS EXE，但随后 WiX MSI `light.exe` 失败，因此该次 workflow 未创建 Release。
-- `v0.1.1`：移除非必要 MSI 阻断，Windows 权威安装包调整为 NSIS EXE；标签构建完成后需核验 GitHub Release 的 5 项资产及两份 SHA-256 清单。
+- `v0.1.1`：macOS ARM64 构建用时 4分27秒，Windows x64 NSIS 构建用时 10分54秒；生产 API、DMG、PE x64、哈希与 Artifact 上传均通过。Release 已发布 5 项资产，两份 SHA-256 清单均经下载复核通过。
+- `v0.1.1` 首次自动 Release step 因 YAML 折叠导致标签参数带前导空格而失败；修复已推送到 `main`，本次复用同一运行的已验证 Artifact 通过仓库发布脚本完成 Release，未重新编译或替换版本标签。
 - 尚未执行：Windows 真机安装、卸载和业务功能验收。
 - 两个平台均未配置正式发行证书；Release 属于预览/测试版本，安装时可能出现系统安全警告。

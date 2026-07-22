@@ -11,5 +11,5 @@
 
 ## 3. 正式发布
 
-- [ ] 3.1 提交并推送修复后的发布流程到 `main`，创建并推送与应用版本一致的 `v0.1.1` 标签
-- [ ] 3.2 监控 macOS、Windows 与 Release 任务成功，并核验 GitHub Release 资产和哈希文件
+- [x] 3.1 提交并推送修复后的发布流程到 `main`，创建并推送与应用版本一致的 `v0.1.1` 标签
+- [x] 3.2 监控 macOS 与 Windows 原生构建，完成 Release 发布，并核验 GitHub Release 资产和哈希文件
