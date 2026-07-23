@@ -377,6 +377,7 @@ Nginx :443
 切换、systemd 健康检查和失败回滚。
 
 - [OpenCloudOS 云端部署手册](docs/cloud-deployment-opencloudos.md)
+- [0.1.4 发布记录](docs/release-0.1.4-record-2026-07-23.md)
 - [0.1.3 发布记录](docs/release-0.1.3-record-2026-07-22.md)
 - [桌面安装包构建与发布](docs/desktop-installers.md)
 - [一期验证报告](docs/verification-report.md)
