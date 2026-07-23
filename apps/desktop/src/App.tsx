@@ -28,6 +28,14 @@ export default function App() {
   }, [clear, setSession]);
 
   useEffect(() => {
+    // 主窗口是原生认证状态的唯一来源，避免 ticker 初始空会话覆盖已登录状态。
+    if (ticker || !("__TAURI_INTERNALS__" in window)) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke("set_authenticated", { authenticated: Boolean(session) }))
+      .catch(() => setNativeWarning("窗口认证状态同步失败，请重新启动应用"));
+  }, [session, ticker]);
+
+  useEffect(() => {
     if (ticker || !session || !("__TAURI_INTERNALS__" in window)) return;
     import("@tauri-apps/api/event")
       .then(({ emitTo }) => emitTo("ticker", "session-sync", session))

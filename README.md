@@ -2,7 +2,7 @@
 
 > 面向个人投资者的 Windows / macOS 桌面盯盘应用：自选持仓、实时盈亏、透明置顶小窗、多行情源与老板键，一处完成。
 
-[![Release](https://img.shields.io/badge/release-v0.1.3-1677ff)](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.3)
+[![Release](https://img.shields.io/badge/release-v0.1.4-1677ff)](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.4)
 [![CI](https://github.com/Super-liang/desktop_trading_assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Super-liang/desktop_trading_assistant/actions/workflows/ci.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-5c6ac4)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
@@ -10,7 +10,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-当前版本：**v0.1.3** · [下载 Windows / macOS 安装包](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.3)
+当前版本：**v0.1.4** · [下载 Windows / macOS 安装包](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.4)
 
 > [!WARNING]
 > 项目当前通过 AKShare 对公开网站行情进行研究验证，数据可能延迟、限流或临时不可用，不构成任何投资建议，也不具备 ToC 商业行情展示与分发授权。正式商用前必须替换为合同明确授权的行情供应商。
@@ -93,13 +93,13 @@
 
 ### 方式一：直接下载安装包
 
-前往 [GitHub Release v0.1.3](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.3)：
+前往 [GitHub Release v0.1.4](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.4)：
 
 | 系统 | 下载文件 |
 | --- | --- |
-| macOS Apple Silicon | `StockTradingAssistant_0.1.3_macos-arm64.dmg` |
-| macOS APP 压缩包 | `StockTradingAssistant_0.1.3_macos-arm64.app.zip` |
-| Windows x64 | `StockTradingAssistant_0.1.3_windows-x64-setup.exe` |
+| macOS Apple Silicon | `StockTradingAssistant_0.1.4_macos-arm64.dmg` |
+| macOS APP 压缩包 | `StockTradingAssistant_0.1.4_macos-arm64.app.zip` |
+| Windows x64 | `StockTradingAssistant_0.1.4_windows-x64-setup.exe` |
 
 Release 同时提供两个平台的 `SHA256SUMS.txt`。建议下载后先校验文件完整性。
 
