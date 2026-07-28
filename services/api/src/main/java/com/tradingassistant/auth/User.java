@@ -51,5 +51,5 @@ public class User {
     public Instant getLastLoginAt() { return lastLoginAt; }
     public void recordLogin() { this.lastLoginAt = Instant.now(); }
     public void setStatus(Status status) { this.status = status; }
+    public void changePasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 }
-

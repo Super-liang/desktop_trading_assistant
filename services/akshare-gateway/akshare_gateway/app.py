@@ -28,6 +28,7 @@ from .market import (
     normalize_code,
 )
 from .sources import MarketSource, SingleSource, SourceHealthRegistry
+from .single_quote_cache import RedisSingleQuoteCache, SingleQuoteCache
 
 SYMBOL_PATTERN = re.compile(r"^(SSE|SZSE|BSE):(\d{6})$")
 log = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class Settings:
     search_limit: int = 20
     upstream_timeout_seconds: float = 30
     single_cache_max_entries: int = 1000
+    redis_url: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -54,6 +56,9 @@ class Settings:
             ),
             single_cache_max_entries=int(
                 os.getenv("AKSHARE_SINGLE_CACHE_MAX_ENTRIES", "1000")
+            ),
+            redis_url=os.getenv(
+                "AKSHARE_REDIS_URL", "redis://127.0.0.1:6379/0"
             ),
         )
 
@@ -121,6 +126,7 @@ def create_app(
     market_frame_loader: Callable[[MarketSource], pd.DataFrame] | None = None,
     single_frame_loader: Callable[[SingleSource, str], pd.DataFrame] | None = None,
     instrument_frame_loader: Callable[[], pd.DataFrame] | None = None,
+    single_quote_cache: SingleQuoteCache | None = None,
 ) -> FastAPI:
     config = settings or Settings.from_env()
     config.validate()
@@ -150,6 +156,11 @@ def create_app(
         "instruments", timeout_seconds=config.upstream_timeout_seconds
     ))
     now = utcnow or (lambda: datetime.now(timezone.utc))
+    if single_quote_cache is None:
+        if not config.redis_url:
+            raise RuntimeError("必须配置 AKSHARE_REDIS_URL")
+        single_quote_cache = RedisSingleQuoteCache.from_url(config.redis_url)
+    persistent_single_cache = single_quote_cache
     source_health = SourceHealthRegistry()
     single_caches: OrderedDict[str, SnapshotCache] = OrderedDict()
     single_caches_lock = Lock()
@@ -317,14 +328,19 @@ def create_app(
                     if cache_key not in single_caches:
                         def loader(selected=request.source, instrument=symbol):
                             source_id = f"SINGLE_{selected.value}"
+                            quote_at = now()
                             quote = source_health.observe(
                                 source_id,
                                 lambda: build_single_quote(
                                     fetch_single_frame(selected, instrument),
                                     instrument,
-                                    now(),
+                                    quote_at,
                                     f"AKSHARE_{selected.value}_SINGLE",
                                 ),
+                            )
+                            succeeded_at = now()
+                            persistent_single_cache.save(
+                                selected.value, instrument, quote, succeeded_at
                             )
                             return {instrument: quote}
 
@@ -344,15 +360,24 @@ def create_app(
                         request.source.value,
                         symbol,
                     )
-                    continue
-                quote = dict(snapshot.quotes[symbol])
-                quote["receivedAt"] = now()
-                quote["stale"] = snapshot.stale
+                    stored = persistent_single_cache.load(request.source.value, symbol)
+                    if stored is None:
+                        continue
+                    quote = dict(stored.quote)
+                    quote["stale"] = True
+                    quote["lastSuccessAt"] = stored.last_success_at
+                else:
+                    quote = dict(snapshot.quotes[symbol])
+                    quote["stale"] = snapshot.stale
+                    stored = persistent_single_cache.load(request.source.value, symbol)
+                    quote["lastSuccessAt"] = (
+                        stored.last_success_at if stored is not None else snapshot.fetched_at
+                    )
                 results.append(quote)
         finally:
             single_batch_deadline.reset(deadline_token)
         if not results:
-            raise HTTPException(status_code=503, detail="所选单股行情源暂不可用")
+            raise HTTPException(status_code=503, detail="所选单股行情源暂无可用数据")
         return results
 
     @application.get("/v1/sources/status", dependencies=[Depends(authorize)])

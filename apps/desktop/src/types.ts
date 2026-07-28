@@ -47,6 +47,21 @@ export type PortfolioSummary = {
   calculationNotice: string;
 };
 
+export type PerformanceStatus = "COMPLETE" | "PARTIAL" | "UNAVAILABLE" | "ACCUMULATING";
+
+export type PerformanceSummary = {
+  dailyProfit: number | null;
+  dailyReturnPercent: number | null;
+  yearProfit: number | null;
+  yearReturnPercent: number | null;
+  annualizedReturnPercent: number | null;
+  statisticsStartDate: string | null;
+  calculatedAt: string;
+  status: PerformanceStatus;
+  missingQuoteCount: number;
+  referenceNotice: string;
+};
+
 export type SearchResult = {
   instrumentId: string;
   code: string;
@@ -63,6 +78,39 @@ export type AdminUser = {
   status: "ACTIVE" | "DISABLED";
   createdAt: string;
   lastLoginAt?: string;
+};
+
+export type AdminUserOverview = {
+  user: AdminUser;
+  holdingCount: number;
+  performance: PerformanceSummary;
+};
+
+// 管理端持仓类型刻意不包含数量、成本、总市值和单只收益字段。
+export type AdminHolding = {
+  instrumentId: string;
+  displayName: string;
+  exchange: string;
+  quoteAvailable: boolean;
+};
+
+export type UserOperationAudit = {
+  id: string;
+  action: "PORTFOLIO_CREATED" | "PORTFOLIO_UPDATED" | "PORTFOLIO_DELETED" | "PASSWORD_CHANGED";
+  instrumentId?: string | null;
+  instrumentName?: string | null;
+  result: string;
+  createdAt: string;
+};
+
+export type Page<T> = {
+  content: T[];
+  number?: number;
+  // 测试替身和非 Spring 网关可使用 page；组件分页以本地请求页码为准。
+  page?: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 };
 
 export type MarketDataConfig = {

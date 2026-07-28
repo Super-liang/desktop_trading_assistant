@@ -7,6 +7,18 @@ import { TICKER_TEXT_OPACITY_STORAGE_KEY } from "../lib/tickerAppearance";
 import { TickerWindow } from "./TickerWindow";
 
 const { portfolio } = vi.hoisted(() => ({ portfolio: vi.fn() }));
+const native = vi.hoisted(() => ({
+  listeners: new Map<string, Array<(event: { payload: unknown }) => void>>(),
+  listen: vi.fn(async (event: string, callback: (event: { payload: unknown }) => void) => {
+    const callbacks = native.listeners.get(event) ?? [];
+    callbacks.push(callback);
+    native.listeners.set(event, callbacks);
+    return vi.fn();
+  }),
+  emitTo: vi.fn().mockResolvedValue(undefined),
+  getByLabel: vi.fn(),
+  window: { isVisible: vi.fn(), isMinimized: vi.fn() },
+}));
 
 vi.mock("../lib/api", () => ({
   api: {
@@ -16,6 +28,11 @@ vi.mock("../lib/api", () => ({
       singleSource: "EASTMONEY", refreshSeconds: 30, updatedAt: "", providers: [],
     }),
   },
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({ listen: native.listen, emitTo: native.emitTo }));
+vi.mock("@tauri-apps/api/webviewWindow", () => ({
+  WebviewWindow: { getByLabel: native.getByLabel },
 }));
 
 let resizeCallback: ResizeObserverCallback | undefined;
@@ -43,6 +60,11 @@ describe("TickerWindow", () => {
     window.localStorage.clear();
     resizeCallback = undefined;
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    native.listeners.clear();
+    native.window.isVisible.mockResolvedValue(true);
+    native.window.isMinimized.mockResolvedValue(false);
+    native.getByLabel.mockResolvedValue(native.window);
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
   it("按实际行情显示 AKSHARE 来源和延迟提示", async () => {
@@ -152,5 +174,28 @@ describe("TickerWindow", () => {
 
     await waitFor(() => expect(portfolio).toHaveBeenCalledWith(
       "MARKET_SNAPSHOT", "EASTMONEY", "XUEQIU"));
+  });
+
+  it("主窗可见时消费共享行情，主窗隐藏后才接管查询", async () => {
+    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><TickerWindow /></QueryClientProvider>);
+
+    await waitFor(() => expect(native.listeners.get("portfolio-sync")?.length).toBe(1));
+    expect(native.emitTo).toHaveBeenCalledWith("main", "ticker-data-ready");
+    expect(portfolio).not.toHaveBeenCalled();
+    act(() => native.listeners.get("portfolio-sync")?.[0]?.({ payload: {
+      mode: "MARKET_SNAPSHOT", snapshotSource: "EASTMONEY", singleSource: "EASTMONEY",
+      data: {
+        items: [], totalProfit: 88, totalMarketValue: 1000, unavailableQuoteCount: 0,
+      },
+    } }));
+    expect(screen.getByText("+¥ 88.00")).toBeInTheDocument();
+
+    const visibilityListeners = native.listeners.get("window-visibility-changed") ?? [];
+    act(() => visibilityListeners.forEach((listener) => listener({
+      payload: { label: "main", visible: false },
+    })));
+    await waitFor(() => expect(portfolio).toHaveBeenCalledOnce());
   });
 });

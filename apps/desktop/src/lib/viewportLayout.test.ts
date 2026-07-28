@@ -21,4 +21,17 @@ describe("主窗口可视区布局", () => {
   it("较矮窗口启用紧凑布局", () => {
     expect(styles).toContain("@media(max-height:700px)");
   });
+
+  it("手机视口恢复纵向滚动并提供固定移动导航", () => {
+    expect(styles).toContain("html:not(.ticker-surface)");
+    expect(styles).toMatch(/html:not\(\.ticker-surface\)[^{]*\{[^}]*overflow-x:hidden[^}]*overflow-y:auto/);
+    expect(styles).toMatch(/\.mobile-nav\{position:fixed[^}]*display:grid[^}]*grid-template-columns:repeat\(3,1fr\)/);
+  });
+
+  it("手机持仓与管理数据降级为卡片且对话框保持在可视高度内", () => {
+    expect(styles).toContain('grid-template-areas:"security security" "price profit"');
+    expect(styles).toMatch(/\.dialog\{width:calc\(100vw - 24px\)[^}]*max-height:calc\(100dvh - 24px\)/);
+    expect(styles).toContain(".two-fields{grid-template-columns:1fr}");
+    expect(styles).toContain(".admin-users-table .admin-row{");
+  });
 });

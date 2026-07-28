@@ -40,8 +40,10 @@ describe("marketPreferences", () => {
   });
 
   it("仅单股模式采用用户轮询频率", () => {
-    expect(portfolioRefetchInterval("SINGLE_STOCK", 20)).toBe(20_000);
-    expect(portfolioRefetchInterval("MARKET_SNAPSHOT", 20)).toBe(2_000);
+    expect(portfolioRefetchInterval("SINGLE_STOCK", 20, 30)).toBe(20_000);
+    expect(portfolioRefetchInterval("MARKET_SNAPSHOT", 20, 30)).toBe(30_000);
+    expect(portfolioRefetchInterval("MARKET_SNAPSHOT", 20, 1)).toBe(5_000);
+    expect(portfolioRefetchInterval("MARKET_SNAPSHOT", 20, Number.NaN)).toBe(30_000);
   });
 
   it("接收其他窗口的 storage 事件后即时同步偏好", async () => {

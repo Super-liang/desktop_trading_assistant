@@ -10,6 +10,8 @@ from akshare_gateway.app import Settings, create_app, load_akshare_frame, load_m
 from akshare_gateway.sources import MarketSource, SingleSource
 from akshare_gateway import http_timeout
 from akshare_gateway.isolation import run_isolated
+from akshare_gateway.single_quote_cache import RedisSingleQuoteCache
+from test_cache import FakeRedis
 
 
 def slow_isolated_worker(sender, *args) -> None:
@@ -28,7 +30,11 @@ def client_for(
     return TestClient(
         create_app(
             settings=settings, frame_loader=lambda: market_frame,
-            utcnow=lambda: fetched_at, **loaders,
+            utcnow=lambda: fetched_at,
+            single_quote_cache=loaders.pop(
+                "single_quote_cache", RedisSingleQuoteCache(FakeRedis())
+            ),
+            **loaders,
         )
     )
 
@@ -269,6 +275,83 @@ def test_single_quotes_are_normalized_and_cached(
     assert next(item for item in statuses if item["source"] == "SINGLE_XUEQIU")["status"] == "UP"
 
 
+def test_single_quote_failure_returns_same_source_last_value_as_stale(
+    fetched_at: datetime, market_frame: pd.DataFrame
+) -> None:
+    redis = FakeRedis()
+    persistent_cache = RedisSingleQuoteCache(redis)
+    frame = pd.DataFrame(
+        [
+            {"item": "最新", "value": 10.2}, {"item": "昨收", "value": 10},
+            {"item": "今开", "value": 10}, {"item": "最高", "value": 10.3},
+            {"item": "最低", "value": 9.9}, {"item": "涨跌", "value": 0.2},
+            {"item": "涨幅", "value": 2}, {"item": "总手", "value": 100},
+        ]
+    )
+    failing = False
+
+    def loader(source, symbol):
+        if failing:
+            raise ConnectionError("upstream unavailable")
+        return frame
+
+    client = client_for(
+        market_frame, fetched_at, single_frame_loader=loader,
+        single_quote_cache=persistent_cache,
+    )
+    headers = {"X-API-Key": "test-shared-key"}
+    payload = {"source": "EASTMONEY", "symbols": ["SSE:600000"]}
+    first = client.post("/v1/quotes/single", headers=headers, json=payload)
+    assert first.status_code == 200
+    assert first.json()[0]["lastSuccessAt"] == fetched_at.isoformat().replace("+00:00", "Z")
+
+    failing = True
+    # 新建应用模拟进程重启，确保回退值不是来自进程内缓存。
+    restarted = client_for(
+        market_frame, fetched_at, single_frame_loader=loader,
+        single_quote_cache=RedisSingleQuoteCache(redis),
+    )
+    fallback = restarted.post("/v1/quotes/single", headers=headers, json=payload)
+
+    assert fallback.status_code == 200
+    assert fallback.json()[0]["last"] == 10.2
+    assert fallback.json()[0]["stale"] is True
+    assert fallback.json()[0]["source"] == "AKSHARE_EASTMONEY_SINGLE"
+    assert fallback.json()[0]["sourceTimestamp"] == first.json()[0]["sourceTimestamp"]
+    assert fallback.json()[0]["lastSuccessAt"] == first.json()[0]["lastSuccessAt"]
+
+
+def test_single_quote_never_falls_back_to_another_source(
+    fetched_at: datetime, market_frame: pd.DataFrame
+) -> None:
+    redis = FakeRedis()
+    persistent_cache = RedisSingleQuoteCache(redis)
+    persistent_cache.save(
+        "XUEQIU", "SSE:600000",
+        {
+            "instrumentId": "SSE:600000", "last": 99,
+            "source": "AKSHARE_XUEQIU_SINGLE", "sourceTimestamp": fetched_at,
+        },
+        fetched_at,
+    )
+    client = client_for(
+        market_frame, fetched_at,
+        single_frame_loader=lambda source, symbol: (_ for _ in ()).throw(
+            ConnectionError("eastmoney unavailable")
+        ),
+        single_quote_cache=persistent_cache,
+    )
+
+    response = client.post(
+        "/v1/quotes/single",
+        headers={"X-API-Key": "test-shared-key"},
+        json={"source": "EASTMONEY", "symbols": ["SSE:600000"]},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "所选单股行情源暂无可用数据"
+
+
 def test_single_quotes_keep_successful_symbols_when_one_upstream_fails(
     fetched_at: datetime, market_frame: pd.DataFrame
 ) -> None:
@@ -332,6 +415,7 @@ def test_single_quote_cache_is_bounded(
     client = TestClient(create_app(
         settings=settings, frame_loader=lambda: market_frame, utcnow=lambda: fetched_at,
         single_frame_loader=lambda source, symbol: calls.append(symbol) or single_frame,
+        single_quote_cache=RedisSingleQuoteCache(FakeRedis()),
     ))
     headers = {"X-API-Key": "test-shared-key"}
     first_fifty = [f"SSE:{code:06d}" for code in range(600000, 600050)]
@@ -397,6 +481,7 @@ def test_single_quote_batch_stops_at_shared_deadline(
     client = TestClient(create_app(
         settings=settings, frame_loader=lambda: market_frame, utcnow=lambda: fetched_at,
         single_frame_loader=slow_loader,
+        single_quote_cache=RedisSingleQuoteCache(FakeRedis()),
     ))
     symbols = [f"SSE:{code:06d}" for code in range(600000, 600050)]
     started = monotonic()

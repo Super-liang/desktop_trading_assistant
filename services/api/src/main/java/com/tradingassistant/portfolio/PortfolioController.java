@@ -2,6 +2,8 @@ package com.tradingassistant.portfolio;
 
 import com.tradingassistant.catalog.SecurityCatalogItem;
 import com.tradingassistant.catalog.SecurityCatalogService;
+import com.tradingassistant.audit.UserOperationAudit;
+import com.tradingassistant.audit.UserOperationAuditService;
 import com.tradingassistant.marketdata.MarketDataConfig;
 import com.tradingassistant.quote.*;
 import jakarta.validation.Valid;
@@ -21,12 +23,14 @@ public class PortfolioController {
     private final PortfolioRepository items;
     private final QuoteProviderRegistry quotes;
     private final SecurityCatalogService catalog;
+    private final UserOperationAuditService audits;
 
     public PortfolioController(PortfolioRepository items, QuoteProviderRegistry quotes,
-            SecurityCatalogService catalog) {
+            SecurityCatalogService catalog, UserOperationAuditService audits) {
         this.items = items;
         this.quotes = quotes;
         this.catalog = catalog;
+        this.audits = audits;
     }
 
     @GetMapping
@@ -70,6 +74,9 @@ public class PortfolioController {
         BigDecimal costPrice = validatedCost(request.quantity(), request.costPrice());
         PortfolioItem item = items.save(new PortfolioItem(userId(jwt), instrument,
                 security.getName(), request.quantity(), costPrice, request.sortOrder()));
+        audits.record(item.getUserId(), UserOperationAudit.Action.PORTFOLIO_CREATED,
+                item.getId(), item.canonical(), item.getDisplayName(),
+                UserOperationAudit.Result.SUCCESS);
         return view(item, null);
     }
 
@@ -85,6 +92,9 @@ public class PortfolioController {
         SecurityCatalogItem security = catalog.requireActive(requested);
         item.update(security.getName(), request.quantity(),
                 validatedCost(request.quantity(), request.costPrice()), request.sortOrder());
+        audits.record(item.getUserId(), UserOperationAudit.Action.PORTFOLIO_UPDATED,
+                item.getId(), item.canonical(), item.getDisplayName(),
+                UserOperationAudit.Result.SUCCESS);
         return view(item, null);
     }
 
@@ -92,7 +102,11 @@ public class PortfolioController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
     void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        items.delete(owned(id, userId(jwt)));
+        PortfolioItem item = owned(id, userId(jwt));
+        items.delete(item);
+        audits.record(item.getUserId(), UserOperationAudit.Action.PORTFOLIO_DELETED,
+                item.getId(), item.canonical(), item.getDisplayName(),
+                UserOperationAudit.Result.SUCCESS);
     }
 
     private PortfolioItem owned(UUID id, UUID userId) {
