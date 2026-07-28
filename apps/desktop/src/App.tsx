@@ -3,6 +3,7 @@ import { useAuth } from "./store/auth";
 import { AuthScreen } from "./components/AuthScreen";
 import { Dashboard } from "./components/Dashboard";
 import { TickerWindow } from "./components/TickerWindow";
+import { TICKER_SESSION_REQUEST_EVENT } from "./lib/desktopEvents";
 
 export default function App() {
   const session = useAuth((state) => state.session);
@@ -15,17 +16,20 @@ export default function App() {
     if ("__TAURI_INTERNALS__" in window) {
       Promise.all([import("@tauri-apps/api/event"), import("@tauri-apps/api/core")])
         .then(async ([events, core]) => {
-          unlisten = await events.listen("session-sync", (event) => {
-            if (event.payload) setSession(event.payload as Parameters<typeof setSession>[0]);
-            else clear();
-          });
+          if (ticker) {
+            unlisten = await events.listen("session-sync", (event) => {
+              if (event.payload) setSession(event.payload as Parameters<typeof setSession>[0]);
+              else clear();
+            });
+            await events.emitTo("main", TICKER_SESSION_REQUEST_EVENT);
+          }
           const warning = await core.invoke<string | null>("startup_warning");
           if (warning) setNativeWarning(warning);
         })
         .catch(() => setNativeWarning("原生能力初始化失败，请从托盘重新打开应用"));
     }
     return () => unlisten?.();
-  }, [clear, setSession]);
+  }, [clear, setSession, ticker]);
 
   useEffect(() => {
     // 主窗口是原生认证状态的唯一来源，避免 ticker 初始空会话覆盖已登录状态。
@@ -37,9 +41,13 @@ export default function App() {
 
   useEffect(() => {
     if (ticker || !session || !("__TAURI_INTERNALS__" in window)) return;
-    import("@tauri-apps/api/event")
-      .then(({ emitTo }) => emitTo("ticker", "session-sync", session))
-      .catch(() => undefined);
+    let unlisten: (() => void) | undefined;
+    import("@tauri-apps/api/event").then(async ({ emitTo, listen }) => {
+      unlisten = await listen(TICKER_SESSION_REQUEST_EVENT, () => {
+        void emitTo("ticker", "session-sync", session).catch(() => undefined);
+      });
+    }).catch(() => undefined);
+    return () => unlisten?.();
   }, [session, ticker]);
 
   // 透明小窗不承载认证页面；退出后保持空白，避免隐藏透明 WebView 渲染整页导致 WebKit 抖动。

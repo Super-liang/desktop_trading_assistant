@@ -1,5 +1,6 @@
 import type {
-  AdminUser, AuthResponse, MarketDataConfig, MarketDataStatus, PortfolioSummary, SearchResult,
+  AdminHolding, AdminUser, AdminUserOverview, AuthResponse, MarketDataConfig, MarketDataStatus,
+  Page, PerformanceSummary, PortfolioSummary, SearchResult, UserOperationAudit,
 } from "../types";
 import { useAuth } from "../store/auth";
 
@@ -75,6 +76,9 @@ export const api = {
   logoutAll: () => request<void>("/api/v1/me/logout-all", { method: "POST" }),
   deleteAccount: (password: string) =>
     request<void>("/api/v1/me", { method: "DELETE", body: JSON.stringify({ password }) }),
+  changePassword: (body: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+    request<void>("/api/v1/me/change-password", { method: "POST", body: JSON.stringify(body) }),
+  performance: () => request<PerformanceSummary>("/api/v1/me/performance"),
   portfolio: (mode?: MarketDataConfig["mode"], snapshotSource?: MarketDataConfig["snapshotSource"],
     singleSource?: MarketDataConfig["singleSource"]) => {
     const query = new URLSearchParams();
@@ -101,6 +105,23 @@ export const api = {
       method: "PATCH", body: JSON.stringify({ status }),
     }),
   audits: () => request<{ content: Array<Record<string, string>> }>("/api/v1/admin/audits"),
+  adminUserOverview: (userId: string) =>
+    request<AdminUserOverview>(`/api/v1/admin/users/${encodeURIComponent(userId)}/overview`),
+  adminUserHoldings: (userId: string) =>
+    request<{ content: AdminHolding[] }>(
+      `/api/v1/admin/users/${encodeURIComponent(userId)}/holdings`),
+  adminUserAudits: (userId: string, filters: {
+    action?: string; from?: string; to?: string; page?: number; size?: number;
+  } = {}) => {
+    const query = new URLSearchParams();
+    if (filters.action) query.set("action", filters.action);
+    if (filters.from) query.set("from", filters.from);
+    if (filters.to) query.set("to", filters.to);
+    query.set("page", String(filters.page ?? 0));
+    query.set("size", String(filters.size ?? 20));
+    return request<Page<UserOperationAudit>>(
+      `/api/v1/admin/users/${encodeURIComponent(userId)}/audits?${query.toString()}`);
+  },
   marketDataConfig: () => request<MarketDataConfig>("/api/v1/market-data/config"),
   updateMarketDataConfig: (body: Pick<MarketDataConfig,
     "provider" | "mode" | "snapshotSource" | "singleSource" | "refreshSeconds">) =>

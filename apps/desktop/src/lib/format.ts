@@ -1,5 +1,26 @@
-export const money = (value: number) =>
-  new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+const moneyFormatter = new Intl.NumberFormat("zh-CN", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const quoteTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  hour12: false,
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+const statusTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+export const money = (value: number) => moneyFormatter.format(value);
+
+export const quoteTime = (value: string | number | Date) => quoteTimeFormatter.format(new Date(value));
+
+export const statusTime = (value: string | number | Date) => statusTimeFormatter.format(new Date(value));
 
 export const percent = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 
@@ -10,4 +31,3 @@ export const marketPhase: Record<string, string> = {
   BREAK: "午间休市",
   CLOSED: "已收盘",
 };
-

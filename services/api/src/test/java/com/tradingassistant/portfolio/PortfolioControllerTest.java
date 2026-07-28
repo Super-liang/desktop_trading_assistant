@@ -2,6 +2,8 @@ package com.tradingassistant.portfolio;
 
 import com.tradingassistant.catalog.SecurityCatalogItem;
 import com.tradingassistant.catalog.SecurityCatalogService;
+import com.tradingassistant.audit.UserOperationAuditService;
+import com.tradingassistant.audit.UserOperationAudit;
 import com.tradingassistant.quote.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,6 +24,7 @@ class PortfolioControllerTest {
     @Mock PortfolioRepository repository;
     @Mock QuoteProviderRegistry quotes;
     @Mock SecurityCatalogService catalog;
+    @Mock UserOperationAuditService audits;
     @Mock Jwt jwt;
 
     @Test
@@ -32,7 +35,7 @@ class PortfolioControllerTest {
         when(catalog.requireActive(instrument)).thenReturn(new SecurityCatalogItem(
                 instrument, "贵州茅台", "AKSHARE", Instant.now()));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        PortfolioController controller = new PortfolioController(repository, quotes, catalog);
+        PortfolioController controller = new PortfolioController(repository, quotes, catalog, audits);
 
         PortfolioController.ItemView result = controller.create(jwt,
                 new PortfolioController.ItemRequest("SSE:600519", "任意名称",
@@ -42,6 +45,9 @@ class PortfolioControllerTest {
         assertThat(result.quote()).isNull();
         assertThat(result.costPrice()).isEqualByComparingTo(BigDecimal.ZERO);
         verifyNoInteractions(quotes);
+        verify(audits).record(eq(userId),
+                eq(UserOperationAudit.Action.PORTFOLIO_CREATED), eq(result.id()),
+                eq("SSE:600519"), eq("贵州茅台"), eq(UserOperationAudit.Result.SUCCESS));
     }
 
     @Test
@@ -59,7 +65,7 @@ class PortfolioControllerTest {
                 new BigDecimal("11"), BigDecimal.TEN, BigDecimal.TEN, new BigDecimal("11"),
                 BigDecimal.TEN, BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ONE, "CONTINUOUS",
                 "AKSHARE_SINA_SNAPSHOT", now, now, true, false, false)));
-        PortfolioController controller = new PortfolioController(repository, quotes, catalog);
+        PortfolioController controller = new PortfolioController(repository, quotes, catalog, audits);
 
         PortfolioController.PortfolioSummary result = controller.list(
                 jwt, com.tradingassistant.marketdata.MarketDataConfig.Mode.MARKET_SNAPSHOT,
@@ -77,5 +83,30 @@ class PortfolioControllerTest {
                         == com.tradingassistant.marketdata.MarketDataConfig.SnapshotSource.SINA
                 && options.singleSource()
                         == com.tradingassistant.marketdata.MarketDataConfig.SingleSource.XUEQIU));
+    }
+
+    @Test
+    void updateAndDeleteWriteSafeOperationAudits() {
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        InstrumentId instrument = InstrumentId.parse("SSE:600519");
+        PortfolioItem item = new PortfolioItem(userId, instrument, "贵州茅台",
+                BigDecimal.TEN, BigDecimal.ONE, 0);
+        when(jwt.getSubject()).thenReturn(userId.toString());
+        when(repository.findByIdAndUserId(itemId, userId)).thenReturn(java.util.Optional.of(item));
+        when(catalog.requireActive(instrument)).thenReturn(new SecurityCatalogItem(
+                instrument, "贵州茅台", "AKSHARE", Instant.now()));
+        PortfolioController controller = new PortfolioController(repository, quotes, catalog, audits);
+
+        controller.update(jwt, itemId, new PortfolioController.ItemRequest(
+                "SSE:600519", "忽略名称", BigDecimal.ONE, BigDecimal.ONE, 0));
+        controller.delete(jwt, itemId);
+
+        verify(audits).record(eq(userId), eq(UserOperationAudit.Action.PORTFOLIO_UPDATED),
+                eq(item.getId()), eq("SSE:600519"), eq("贵州茅台"),
+                eq(UserOperationAudit.Result.SUCCESS));
+        verify(audits).record(eq(userId), eq(UserOperationAudit.Action.PORTFOLIO_DELETED),
+                eq(item.getId()), eq("SSE:600519"), eq("贵州茅台"),
+                eq(UserOperationAudit.Result.SUCCESS));
     }
 }

@@ -1,56 +1,51 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Database, EyeOff, LogOut, Plus, Settings, Shield, Sparkles, UserX } from "lucide-react";
-import { useState } from "react";
+import {
+  Activity, BriefcaseBusiness, Database, EyeOff, Home, KeyRound, LogOut, Settings, Shield,
+  Sparkles, UserX,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { money } from "../lib/format";
 import { summarizeQuoteSource } from "../lib/quoteSource";
 import { portfolioRefetchInterval, useMarketPreferences } from "../lib/marketPreferences";
 import { useAuth } from "../store/auth";
 import { AddPositionDialog } from "./AddPositionDialog";
-import { PortfolioTable } from "./PortfolioTable";
 import { AdminPanel } from "./AdminPanel";
+import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { EditPositionDialog } from "./EditPositionDialog";
+import { HomePage } from "./HomePage";
 import { MarketDataSettings } from "./MarketDataSettings";
-import { MarketStatusLights } from "./MarketStatusLights";
+import { PortfolioPage } from "./PortfolioPage";
 import type { PortfolioItem } from "../types";
+import { isTauriRuntime, useWindowVisibility } from "../lib/windowVisibility";
+import { PORTFOLIO_SYNC_EVENT, TICKER_DATA_READY_EVENT } from "../lib/desktopEvents";
+
+type ActiveView = "HOME" | "PORTFOLIO" | "MARKET_DATA" | "ADMIN";
 
 async function toggleTicker() {
   try {
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-    const ticker = await WebviewWindow.getByLabel("ticker");
-    if (!ticker) return;
-    if (await ticker.isVisible()) {
-      await ticker.hide();
-      return;
-    }
-    const { emitTo } = await import("@tauri-apps/api/event");
-    await emitTo("ticker", "session-sync", useAuth.getState().session);
-    await ticker.show();
-    await ticker.setFocus();
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("toggle_ticker_window");
   } catch {
     // 浏览器开发模式没有原生窗口，保持主界面可用。
   }
 }
 
 function resetMainSession(clear: () => void) {
-  if ("__TAURI_INTERNALS__" in window) {
-    window.location.reload();
-  } else {
-    clear();
-  }
+  if ("__TAURI_INTERNALS__" in window) window.location.reload();
+  else clear();
 }
 
 export function Dashboard() {
   const session = useAuth((state) => state.session);
   const clear = useAuth((state) => state.clear);
+  const [activeView, setActiveView] = useState<ActiveView>("HOME");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<PortfolioItem | null>(null);
-  const [admin, setAdmin] = useState(false);
-  const [marketDataSettings, setMarketDataSettings] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const visible = useWindowVisibility("main");
   const marketConfig = useQuery({
-    queryKey: ["market-data-config"],
-    queryFn: api.marketDataConfig,
-    refetchInterval: 30_000,
+    queryKey: ["market-data-config"], queryFn: api.marketDataConfig,
+    refetchInterval: 30_000, enabled: visible,
   });
   const preferences = useMarketPreferences(
     marketConfig.data?.mode ?? "MARKET_SNAPSHOT",
@@ -60,18 +55,42 @@ export function Dashboard() {
   const marketMode = preferences.mode;
   const portfolio = useQuery({
     queryKey: ["portfolio", preferences.snapshotSource, preferences.singleSource, marketMode],
-    queryFn: () => api.portfolio(marketMode,
-      preferences.snapshotSource, preferences.singleSource),
-    refetchInterval: portfolioRefetchInterval(marketMode, preferences.singleRefreshSeconds),
-    enabled: marketConfig.isSuccess,
+    queryFn: () => api.portfolio(marketMode, preferences.snapshotSource, preferences.singleSource),
+    refetchInterval: portfolioRefetchInterval(
+      marketMode, preferences.singleRefreshSeconds, marketConfig.data?.refreshSeconds ?? 30,
+    ),
+    enabled: visible && marketConfig.isSuccess,
+  });
+  const performance = useQuery({
+    queryKey: ["me-performance"], queryFn: api.performance,
+    refetchInterval: portfolioRefetchInterval(
+      marketMode, preferences.singleRefreshSeconds, marketConfig.data?.refreshSeconds ?? 30,
+    ),
+    enabled: visible,
   });
 
-  // App 会在会话清空后切回登录页；子组件可能先收到 store 更新，需安全结束本帧。
+  useEffect(() => {
+    if (!visible || !portfolio.data || !isTauriRuntime()) return;
+    let unlisten: (() => void) | undefined;
+    const payload = {
+      mode: marketMode,
+      snapshotSource: preferences.snapshotSource,
+      singleSource: preferences.singleSource,
+      data: portfolio.data,
+    };
+    import("@tauri-apps/api/event").then(async ({ emitTo, listen }) => {
+      await emitTo("ticker", PORTFOLIO_SYNC_EVENT, payload).catch(() => undefined);
+      unlisten = await listen(TICKER_DATA_READY_EVENT, () => {
+        void emitTo("ticker", PORTFOLIO_SYNC_EVENT, payload).catch(() => undefined);
+      });
+    }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [marketMode, portfolio.data, preferences.singleSource, preferences.snapshotSource, visible]);
+
   if (!session) return null;
   const refreshToken = session.refreshToken;
 
   function logout() {
-    // 原生端重载可见主 WebView，彻底清除内存会话并规避 macOS 隐藏 WebView 抖动。
     const revokeRequest = api.logout(refreshToken).catch(() => undefined);
     resetMainSession(clear);
     void revokeRequest;
@@ -95,75 +114,83 @@ export function Dashboard() {
   }
 
   async function remove(id: string) {
-    await api.deleteItem(id);
-    await portfolio.refetch();
+    try {
+      await api.deleteItem(id);
+      await portfolio.refetch();
+      await performance.refetch();
+    } catch (reason) {
+      window.alert(reason instanceof Error ? reason.message : "删除失败");
+    }
   }
 
-  if (admin) return <AdminPanel onBack={() => setAdmin(false)} />;
-  if (marketDataSettings) return <MarketDataSettings isAdmin={session.role === "ADMIN"}
-    onBack={() => setMarketDataSettings(false)} />;
   const data = portfolio.data;
-  const noValuation = Boolean(data?.items.length
-    && data.unavailableQuoteCount === data.items.length);
   const quoteSource = summarizeQuoteSource(data?.items ?? [], portfolio.isError);
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand"><Activity size={20} /> 隐线</div>
-        <nav>
-          <button className="active"><Activity size={18} /> 盯盘工作台</button>
-          <button onClick={toggleTicker}><EyeOff size={18} /> 透明小窗</button>
-          <button onClick={() => setMarketDataSettings(true)}><Database size={18} /> 实时行情源</button>
-          {session.role === "ADMIN" && <button onClick={() => setAdmin(true)}><Shield size={18} /> 用户管理</button>}
-          <button disabled><Settings size={18} /> 个性设置 <span className="phase">二期</span></button>
-          <button disabled><Sparkles size={18} /> AI 分析 <span className="phase">三期</span></button>
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="shortcut-card"><small>老板键</small><strong>⌘ / Ctrl + Shift + H</strong>
-            <span>全局隐藏全部行情窗口</span></div>
-          <button onClick={logout}><LogOut size={17} /> 退出登录</button>
-          <button onClick={logoutAll}><Shield size={17} /> 退出全部设备</button>
-          <button className="danger-text" onClick={deleteAccount}><UserX size={17} /> 注销账号</button>
-        </div>
-      </aside>
-      <main className="workspace">
-        <header className="workspace-header">
-          <div><p className="eyebrow">MARKET DESK · A SHARE</p><h1>我的盯盘</h1>
-            <p>{new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })}</p></div>
-          <button className="primary-button small" onClick={() => setAdding(true)}><Plus size={17} /> 添加自选</button>
-        </header>
-        <div className="demo-banner"><span>{quoteSource.badge}</span>
-          {quoteSource.notice}</div>
-        <MarketStatusLights mode={marketMode} singleSource={preferences.singleSource} />
-        <section className="summary-grid">
-          <article className="summary-card featured"><small>持仓总市值</small>
-            <strong>{noValuation ? "--" : `¥ ${money(data?.totalMarketValue ?? 0)}`}</strong>
-            <span>{quoteSource.estimate}</span></article>
-          <article className="summary-card"><small>累计浮盈亏</small>
-            <strong className={(data?.totalProfit ?? 0) >= 0 ? "up" : "down"}>
-              {noValuation ? "--" : `${(data?.totalProfit ?? 0) >= 0 ? "+" : ""}¥ ${money(data?.totalProfit ?? 0)}`}</strong>
-            <span>{data?.unavailableQuoteCount ? `${data.unavailableQuoteCount} 只证券未计入` : "不含费用与税费"}</span></article>
-          <article className="summary-card"><small>数据状态</small><strong className="status-live">
-            <i /> {quoteSource.status}</strong>
-            <span>{marketMode === "MARKET_SNAPSHOT"
-              ? `服务端快照刷新频率：${marketConfig.data?.refreshSeconds ?? "--"} 秒`
-              : `客户端查询频率：${preferences.singleRefreshSeconds} 秒`}</span></article>
-        </section>
-        <section className="list-card">
-          <div className="section-title"><div><p className="eyebrow">WATCHLIST</p><h2>自选与持仓</h2></div>
-            <span>{data?.items.length ?? 0} 个标的</span></div>
-          {portfolio.isLoading ? <div className="empty-state">正在连接行情网关…</div>
-            : portfolio.isError ? <div className="empty-state error">
-              {portfolio.error instanceof Error ? portfolio.error.message : "行情列表加载失败，请稍后重试"}
-            </div>
-            : <PortfolioTable items={data?.items ?? []} onDelete={remove} onEdit={setEditing} />}
-        </section>
-        <footer>{data?.calculationNotice ?? "浮盈亏仅供参考"} · 最后行情时间会随每条数据展示</footer>
-      </main>
-      {adding && <AddPositionDialog onClose={() => setAdding(false)}
-        onAdded={() => { setAdding(false); void portfolio.refetch(); }} />}
-      {editing && <EditPositionDialog item={editing} onClose={() => setEditing(null)}
-        onSaved={() => { setEditing(null); void portfolio.refetch(); }} />}
-    </div>
-  );
+  const navigate = (view: ActiveView) => setActiveView(view);
+  const mainContent = activeView === "PORTFOLIO"
+    ? <PortfolioPage data={data} loading={portfolio.isLoading}
+      error={portfolio.error instanceof Error ? portfolio.error : null}
+      onAdd={() => setAdding(true)} onEdit={setEditing} onDelete={(id) => void remove(id)} />
+    : activeView === "MARKET_DATA"
+      ? <MarketDataSettings isAdmin={session.role === "ADMIN"} onBack={() => navigate("HOME")} />
+      : activeView === "ADMIN"
+        ? <AdminPanel onBack={() => navigate("HOME")} />
+        : <HomePage data={data} performance={performance.data}
+          performanceLoading={performance.isLoading} performanceError={performance.isError}
+          quoteBadge={quoteSource.badge} quoteNotice={quoteSource.notice}
+          marketMode={marketMode} singleSource={preferences.singleSource} visible={visible}
+          refreshSeconds={marketConfig.data?.refreshSeconds}
+          singleRefreshSeconds={preferences.singleRefreshSeconds}
+          onAdd={() => setAdding(true)} onOpenPortfolio={() => navigate("PORTFOLIO")} />;
+
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <div className="brand"><Activity size={20} /> 隐线</div>
+      <nav aria-label="桌面端导航">
+        <button className={activeView === "HOME" ? "active" : ""} onClick={() => navigate("HOME")}>
+          <Home size={18} /> 首页</button>
+        <button className={activeView === "PORTFOLIO" ? "active" : ""} onClick={() => navigate("PORTFOLIO")}>
+          <BriefcaseBusiness size={18} /> 我的持仓</button>
+        <button onClick={toggleTicker}><EyeOff size={18} /> 透明小窗</button>
+        <button className={activeView === "MARKET_DATA" ? "active" : ""} onClick={() => navigate("MARKET_DATA")}>
+          <Database size={18} /> 实时行情源</button>
+        {session.role === "ADMIN" && <button className={activeView === "ADMIN" ? "active" : ""}
+          onClick={() => navigate("ADMIN")}><Shield size={18} /> 用户管理</button>}
+        <button onClick={() => setChangingPassword(true)}><KeyRound size={18} /> 修改密码</button>
+        <button disabled><Settings size={18} /> 个性设置 <span className="phase">二期</span></button>
+        <button disabled><Sparkles size={18} /> AI 分析 <span className="phase">三期</span></button>
+      </nav>
+      <div className="sidebar-bottom">
+        <div className="shortcut-card"><small>老板键</small><strong>⌘ / Ctrl + Shift + H</strong>
+          <span>全局隐藏全部行情窗口</span></div>
+        <button onClick={logout}><LogOut size={17} /> 退出登录</button>
+        <button onClick={logoutAll}><Shield size={17} /> 退出全部设备</button>
+        <button className="danger-text" onClick={deleteAccount}><UserX size={17} /> 注销账号</button>
+      </div>
+    </aside>
+    <nav className="mobile-nav" aria-label="移动端导航">
+      <button className={activeView === "HOME" ? "active" : ""} onClick={() => navigate("HOME")}>
+        <Home size={19} /><span>首页</span></button>
+      <button className={activeView === "PORTFOLIO" ? "active" : ""} onClick={() => navigate("PORTFOLIO")}>
+        <BriefcaseBusiness size={19} /><span>我的持仓</span></button>
+      <button className={activeView === "MARKET_DATA" ? "active" : ""} onClick={() => navigate("MARKET_DATA")}>
+        <Database size={19} /><span>实时行情源</span></button>
+      <button onClick={() => setChangingPassword(true)}><KeyRound size={19} /><span>修改密码</span></button>
+      {session.role === "ADMIN" && <button className={activeView === "ADMIN" ? "active" : ""}
+        onClick={() => navigate("ADMIN")}><Shield size={19} /><span>用户管理</span></button>}
+      <button onClick={logout}><LogOut size={19} /><span>退出登录</span></button>
+    </nav>
+    <div className="view-host">{mainContent}</div>
+    {adding && <AddPositionDialog onClose={() => setAdding(false)} onAdded={() => {
+      setAdding(false);
+      setActiveView("PORTFOLIO");
+      void portfolio.refetch();
+      void performance.refetch();
+    }} />}
+    {editing && <EditPositionDialog item={editing} onClose={() => setEditing(null)} onSaved={() => {
+      setEditing(null);
+      void portfolio.refetch();
+      void performance.refetch();
+    }} />}
+    {changingPassword && <ChangePasswordDialog onClose={() => setChangingPassword(false)} />}
+  </div>;
 }

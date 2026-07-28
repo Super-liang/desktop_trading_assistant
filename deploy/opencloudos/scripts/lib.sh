@@ -24,6 +24,16 @@ nginx_site_file() {
   fi
 }
 
+nginx_domain_site_file() {
+  if [[ -d /www/server/panel/vhost/nginx ]]; then
+    echo /www/server/panel/vhost/nginx/stock-watch-domain.conf
+  elif [[ -d /etc/nginx/conf.d ]]; then
+    echo /etc/nginx/conf.d/stock-watch-domain.conf
+  else
+    die "无法识别 Nginx 域名站点配置目录"
+  fi
+}
+
 reload_nginx() {
   nginx -t || return 1
   if [[ -d /www/server/nginx/conf ]]; then

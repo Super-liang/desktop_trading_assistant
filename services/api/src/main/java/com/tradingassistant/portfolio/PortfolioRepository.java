@@ -8,5 +8,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PortfolioRepository extends JpaRepository<PortfolioItem, UUID> {
     List<PortfolioItem> findAllByUserIdOrderBySortOrderAscCreatedAtAsc(UUID userId);
     Optional<PortfolioItem> findByIdAndUserId(UUID id, UUID userId);
+    long countByUserId(UUID userId);
 }
-

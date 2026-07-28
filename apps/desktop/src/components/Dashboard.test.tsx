@@ -6,45 +6,50 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "../store/auth";
 import { Dashboard } from "./Dashboard";
 
-const { logout, portfolio, marketDataConfig, marketDataStatus } = vi.hoisted(() => ({
+const { logout, portfolio, performance, marketDataConfig, marketDataStatus, search, addItem } = vi.hoisted(() => ({
   logout: vi.fn(() => new Promise<void>(() => undefined)),
   portfolio: vi.fn().mockResolvedValue({
     items: [], totalMarketValue: 0, totalProfit: 0, unavailableQuoteCount: 0,
     calculationNotice: "测试",
   }),
+  performance: vi.fn(),
   marketDataConfig: vi.fn(),
   marketDataStatus: vi.fn().mockResolvedValue({
     mode: "MARKET_SNAPSHOT", checkedAt: "2026-07-22T01:00:00Z", components: [],
   }),
+  search: vi.fn(),
+  addItem: vi.fn(),
 }));
 
 const native = vi.hoisted(() => ({
   emitTo: vi.fn(),
-  getByLabel: vi.fn(),
-  ticker: {
-    isVisible: vi.fn(),
-    hide: vi.fn(),
-    show: vi.fn(),
-    setFocus: vi.fn(),
-  },
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+  invoke: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
   api: {
     logout,
     portfolio,
+    performance,
     marketDataConfig,
     marketDataStatus,
+    logoutAll: vi.fn(),
+    deleteAccount: vi.fn(),
+    deleteItem: vi.fn(),
+    changePassword: vi.fn(),
+    search,
+    addItem,
+    updateItem: vi.fn(),
   },
-}));
-
-vi.mock("@tauri-apps/api/webviewWindow", () => ({
-  WebviewWindow: { getByLabel: native.getByLabel },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
   emitTo: native.emitTo,
+  listen: native.listen,
 }));
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));
 
 function renderDashboard() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -78,7 +83,24 @@ describe("Dashboard", () => {
         { id: "UPSTREAM", label: "SNAPSHOT_EASTMONEY", status: "UP", detail: "120 ms" },
       ],
     });
-    native.getByLabel.mockResolvedValue(native.ticker);
+    performance.mockResolvedValue({
+      dailyProfit: 123.45,
+      dailyReturnPercent: 1.23,
+      yearProfit: -88.5,
+      yearReturnPercent: -0.75,
+      annualizedReturnPercent: null,
+      statisticsStartDate: "2026-07-01",
+      calculatedAt: "2026-07-27T01:00:00Z",
+      status: "ACCUMULATING",
+      missingQuoteCount: 0,
+      referenceNotice: "基于手工持仓和行情计算的参考收益",
+    });
+    search.mockResolvedValue([{
+      instrumentId: "SSE:600519", code: "600519", name: "贵州茅台",
+      exchange: "SSE", assetType: "STOCK",
+    }]);
+    addItem.mockResolvedValue({});
+    native.invoke.mockResolvedValue(undefined);
     useAuth.getState().setSession({
       accessToken: "access",
       refreshToken: "refresh",
@@ -90,72 +112,41 @@ describe("Dashboard", () => {
   it("服务端撤销请求不返回时也立即清除本地会话", () => {
     renderDashboard();
 
-    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "退出登录" })[0]);
 
     expect(logout).toHaveBeenCalledWith("refresh");
     expect(useAuth.getState().session).toBeNull();
   });
 
-  it("ticker 已显示时点击透明小窗会隐藏", async () => {
-    native.ticker.isVisible.mockResolvedValue(true);
+  it("点击透明小窗交由原生命令按需创建或销毁", async () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole("button", { name: "透明小窗" }));
 
-    await waitFor(() => expect(native.ticker.hide).toHaveBeenCalledOnce());
-    expect(native.ticker.show).not.toHaveBeenCalled();
-    expect(native.emitTo).not.toHaveBeenCalled();
+    await waitFor(() => expect(native.invoke).toHaveBeenCalledWith("toggle_ticker_window"));
   });
 
-  it("ticker 已隐藏时同步会话、显示并聚焦", async () => {
-    native.ticker.isVisible.mockResolvedValue(false);
-    renderDashboard();
-    const session = useAuth.getState().session;
-
-    fireEvent.click(screen.getByRole("button", { name: "透明小窗" }));
-
-    await waitFor(() => {
-      expect(native.emitTo).toHaveBeenCalledWith("ticker", "session-sync", session);
-    });
-    expect(native.ticker.show).toHaveBeenCalledOnce();
-    expect(native.ticker.setFocus).toHaveBeenCalledOnce();
-    expect(native.ticker.hide).not.toHaveBeenCalled();
-  });
-
-  it("ticker 被外部隐藏后再次点击仍会重新查询并显示", async () => {
-    native.ticker.isVisible.mockResolvedValue(false);
-    renderDashboard();
-    const button = screen.getByRole("button", { name: "透明小窗" });
-
-    fireEvent.click(button);
-    await waitFor(() => expect(native.ticker.show).toHaveBeenCalledTimes(1));
-
-    fireEvent.click(button);
-    await waitFor(() => expect(native.ticker.show).toHaveBeenCalledTimes(2));
-    expect(native.ticker.isVisible).toHaveBeenCalledTimes(2);
-    expect(native.emitTo).toHaveBeenCalledTimes(2);
-  });
-
-  it("没有 Tauri 原生窗口时点击不会破坏主界面", async () => {
-    native.getByLabel.mockRejectedValue(new Error("browser mode"));
+  it("原生小窗命令失败时仍保持主界面可用", async () => {
+    native.invoke.mockRejectedValue(new Error("browser mode"));
     renderDashboard();
 
     fireEvent.click(screen.getByRole("button", { name: "透明小窗" }));
 
-    await waitFor(() => expect(native.getByLabel).toHaveBeenCalledWith("ticker"));
+    await waitFor(() => expect(native.invoke).toHaveBeenCalledWith("toggle_ticker_window"));
     expect(screen.getByRole("heading", { name: "我的盯盘" })).toBeInTheDocument();
   });
 
   it("展示各行情链路的独立联通指示", async () => {
     renderDashboard();
 
-    expect(await screen.findByText("AKShare 网关")).toBeInTheDocument();
-    expect(screen.getByText("Redis 快照")).toBeInTheDocument();
-    expect(screen.getByText("SNAPSHOT_EASTMONEY")).toBeInTheDocument();
+    expect(await screen.findByText("AKShare 行情服务")).toBeInTheDocument();
+    expect(screen.getByText("全市场缓存")).toBeInTheDocument();
+    expect(screen.getByText("东方财富全市场行情")).toBeInTheDocument();
+    expect(screen.queryByText(/Spring API|SNAPSHOT_EASTMONEY/)).not.toBeInTheDocument();
     expect(screen.queryByText("DEMO")).not.toBeInTheDocument();
   });
 
-  it("部分响应省略 quote 字段时仍保持首页可见", async () => {
+  it("首页不展示持仓证券、数量与成本，进入我的持仓后才展示", async () => {
     portfolio.mockResolvedValue({
       items: [{
         id: "1", instrumentId: "SSE:600519", displayName: "贵州茅台",
@@ -167,9 +158,67 @@ describe("Dashboard", () => {
     });
     renderDashboard();
 
+    expect(await screen.findByRole("heading", { name: "我的盯盘" })).toBeInTheDocument();
+    expect(screen.queryByText("贵州茅台")).not.toBeInTheDocument();
+    expect(await screen.findByText("服务端快照刷新频率：30 秒")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /我的持仓/ })[0]);
     expect(await screen.findByText("贵州茅台")).toBeInTheDocument();
+  });
+
+  it("金额与比率统一切换，并展示数据积累状态", async () => {
+    renderDashboard();
+
+    expect(await screen.findByText("+¥ 123.45")).toBeInTheDocument();
+    expect(screen.getByText("-¥ 88.50")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "比率" }));
+
+    expect(screen.getByText("+1.23%")).toBeInTheDocument();
+    expect(screen.getByText("-0.75%")).toBeInTheDocument();
+    expect(screen.getByText(/数据积累中/)).toBeInTheDocument();
+    expect(screen.getByText(/参考收益/)).toBeInTheDocument();
+  });
+
+  it("手机导航提供首页、持仓、行情源、修改密码与退出入口", async () => {
+    renderDashboard();
+
+    expect(await screen.findByRole("navigation", { name: "移动端导航" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /首页/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /我的持仓/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /实时行情源/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /修改密码/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /退出登录/ }).length).toBeGreaterThan(0);
+  });
+
+  it("从首页新增成功后跳转我的持仓并刷新共享查询", async () => {
+    renderDashboard();
+    fireEvent.click(await screen.findByRole("button", { name: /添加持仓/ }));
+    fireEvent.change(screen.getByPlaceholderText("输入代码或名称，例如 600519"), {
+      target: { value: "600519" },
+    });
+    fireEvent.click(await screen.findByText("贵州茅台"));
+    fireEvent.click(screen.getByRole("button", { name: "加入盯盘" }));
+
+    expect(await screen.findByRole("heading", { name: "我的持仓" })).toBeInTheDocument();
+    expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ instrumentId: "SSE:600519" }));
+    expect(portfolio.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("新增失败时保留首页、对话框和已输入内容", async () => {
+    addItem.mockRejectedValueOnce(new Error("保存失败，请重试"));
+    renderDashboard();
+    fireEvent.click(await screen.findByRole("button", { name: /添加持仓/ }));
+    const searchInput = screen.getByPlaceholderText("输入代码或名称，例如 600519");
+    fireEvent.change(searchInput, { target: { value: "600519" } });
+    fireEvent.click(await screen.findByText("贵州茅台"));
+    fireEvent.change(screen.getByLabelText("持仓数量"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("单位成本"), { target: { value: "1200.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入盯盘" }));
+
+    expect(await screen.findByText("保存失败，请重试")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "我的盯盘" })).toBeInTheDocument();
-    expect(screen.getByText("服务端快照刷新频率：30 秒")).toBeInTheDocument();
+    expect(searchInput).toHaveValue("600519");
+    expect(screen.getByLabelText("持仓数量")).toHaveValue("100");
+    expect(screen.getByLabelText("单位成本")).toHaveValue("1200.5");
   });
 
   it("单股模式显示并采用本机客户端查询频率", async () => {

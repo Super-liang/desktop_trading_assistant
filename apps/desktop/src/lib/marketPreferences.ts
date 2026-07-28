@@ -75,8 +75,12 @@ export function saveMarketPreferences(
 export function portfolioRefetchInterval(
   mode: MarketDataConfig["mode"],
   singleRefreshSeconds: SingleRefreshSeconds,
+  snapshotRefreshSeconds: number,
 ) {
-  return mode === "SINGLE_STOCK" ? singleRefreshSeconds * 1000 : 2000;
+  if (mode === "SINGLE_STOCK") return singleRefreshSeconds * 1000;
+  const safeRefreshSeconds = Number.isFinite(snapshotRefreshSeconds) && snapshotRefreshSeconds > 0
+    ? snapshotRefreshSeconds : 30;
+  return Math.max(5, safeRefreshSeconds) * 1000;
 }
 
 export function useMarketPreferences(defaultMode: MarketMode,
