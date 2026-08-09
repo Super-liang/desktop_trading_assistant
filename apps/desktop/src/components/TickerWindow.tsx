@@ -45,7 +45,7 @@ export function TickerWindow() {
   });
   const preferences = useMarketPreferences(
     marketConfig.data?.mode ?? "MARKET_SNAPSHOT",
-    marketConfig.data?.snapshotSource ?? "EASTMONEY",
+    marketConfig.data?.snapshotSource ?? "SINA",
     marketConfig.data?.singleSource ?? "EASTMONEY",
   );
   const marketMode = preferences.mode;

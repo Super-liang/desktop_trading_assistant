@@ -3,6 +3,7 @@ package com.tradingassistant.marketdata;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradingassistant.quote.InstrumentId;
 import com.tradingassistant.quote.Quote;
+import com.tradingassistant.market.Market;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,7 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @EnabledIfEnvironmentVariable(named = "REDIS_INTEGRATION", matches = "true")
 class RedisMarketSnapshotRepositoryIntegrationTest {
-    private static final String PREFIX = "trading:quotes:akshare:snapshot:";
+    private static final String PREFIX = "trading:quotes:akshare:a_share:snapshot:";
+    private static final String ROOT_PREFIX = "trading:quotes:akshare:";
     private LettuceConnectionFactory connectionFactory;
     private StringRedisTemplate redis;
     private RedisMarketSnapshotRepository repository;
@@ -133,8 +135,39 @@ class RedisMarketSnapshotRepositoryIntegrationTest {
                 List.of(InstrumentId.parse("SSE:600519")))).containsExactly(quote);
     }
 
+    @Test
+    void marketAndSourceKeysNeverPolluteEachOtherAndHaveNoTtl() {
+        Instant at = Instant.parse("2026-07-22T14:00:00Z");
+        Quote hk = quote("HKEX:00700", "腾讯控股", at);
+        Quote us = quote("NASDAQ:AAPL", "Apple", at);
+
+        repository.replace(Market.HK_STOCK, MarketDataConfig.SnapshotSource.EASTMONEY,
+                List.of(hk));
+        repository.replace(Market.US_STOCK, MarketDataConfig.SnapshotSource.EASTMONEY,
+                List.of(us));
+
+        assertThat(repository.find(Market.HK_STOCK,
+                MarketDataConfig.SnapshotSource.EASTMONEY, List.of("HKEX:00700")))
+                .containsExactly(hk);
+        assertThat(repository.find(Market.US_STOCK,
+                MarketDataConfig.SnapshotSource.EASTMONEY, List.of("NASDAQ:AAPL")))
+                .containsExactly(us);
+        assertThat(repository.find(Market.HK_STOCK,
+                MarketDataConfig.SnapshotSource.EASTMONEY, List.of("NASDAQ:AAPL")))
+                .isEmpty();
+        assertThat(redis.getExpire("trading:quotes:akshare:hk_stock:snapshot:eastmoney"))
+                .isEqualTo(-1);
+    }
+
+    private Quote quote(String instrumentId, String name, Instant at) {
+        return new Quote(instrumentId, name, BigDecimal.TEN, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ONE, "OPEN", "AKSHARE", at, at,
+                true, false, false);
+    }
+
     private void deleteTestKeys() {
-        Set<String> keys = redis.keys(PREFIX + "*");
+        Set<String> keys = redis.keys(ROOT_PREFIX + "*");
         if (keys != null && !keys.isEmpty()) redis.delete(keys);
     }
 }

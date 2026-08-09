@@ -27,10 +27,12 @@ describe("MarketStatusLights", () => {
       mode: "MARKET_SNAPSHOT", checkedAt: "2026-07-28T01:00:00Z", components: [
         { id: "SPRING_API", label: "Spring API", status: "UP" },
         { id: "AKSHARE_GATEWAY", label: "AKShare Gateway", status: "UP" },
-        { id: "REDIS_SNAPSHOT_EASTMONEY", label: "Redis Eastmoney", status: "UP", ageSeconds: 3 },
-        { id: "REDIS_SNAPSHOT_SINA", label: "Redis Sina", status: "UP", ageSeconds: 4 },
-        { id: "UPSTREAM_SNAPSHOT_EASTMONEY", label: "SNAPSHOT_EASTMONEY", status: "UP" },
-        { id: "UPSTREAM_SNAPSHOT_SINA", label: "SNAPSHOT_SINA", status: "UP" },
+        { id: "REDIS_SNAPSHOT_A_SHARE_SINA", label: "A Share", status: "UP", ageSeconds: 3 },
+        { id: "REDIS_SNAPSHOT_HK_STOCK_SINA", label: "HK", status: "UP", ageSeconds: 4 },
+        { id: "REDIS_SNAPSHOT_US_STOCK_SINA", label: "US", status: "UP", ageSeconds: 5 },
+        { id: "UPSTREAM_A_SHARE:SNAPSHOT:SINA", label: "A_SHARE:SNAPSHOT:SINA", status: "UP" },
+        { id: "UPSTREAM_HK_STOCK:SNAPSHOT:SINA", label: "HK_STOCK:SNAPSHOT:SINA", status: "UP" },
+        { id: "UPSTREAM_US_STOCK:POSITION:SINA", label: "US_STOCK:POSITION:SINA", status: "UP" },
       ],
     });
 
@@ -38,11 +40,13 @@ describe("MarketStatusLights", () => {
 
     expect(await screen.findByText("后端服务")).toBeInTheDocument();
     expect(screen.getByText("AKShare 行情服务")).toBeInTheDocument();
-    expect(screen.getByText("东方财富行情缓存")).toBeInTheDocument();
-    expect(screen.getByText("新浪行情缓存")).toBeInTheDocument();
-    expect(screen.getByText("东方财富全市场行情")).toBeInTheDocument();
-    expect(screen.getByText("新浪全市场行情")).toBeInTheDocument();
-    expect(screen.queryByText(/Spring API|SNAPSHOT_/)).not.toBeInTheDocument();
+    expect(screen.getByText("A股新浪缓存")).toBeInTheDocument();
+    expect(screen.getByText("港股新浪缓存")).toBeInTheDocument();
+    expect(screen.getByText("美股新浪缓存")).toBeInTheDocument();
+    expect(screen.getByText("A股新浪行情")).toBeInTheDocument();
+    expect(screen.getByText("港股新浪行情")).toBeInTheDocument();
+    expect(screen.getByText("美股新浪行情")).toBeInTheDocument();
+    expect(screen.queryByText(/Spring API|EASTMONEY/)).not.toBeInTheDocument();
   });
 
   it("单股模式将东方财富和雪球上游名称显示为中文", async () => {

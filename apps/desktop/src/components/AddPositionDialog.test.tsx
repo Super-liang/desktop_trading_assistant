@@ -3,10 +3,15 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddPositionDialog } from "./AddPositionDialog";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
+import { marketLocalDate } from "../lib/marketDate";
 
 vi.mock("../lib/api", () => ({
-  api: { search: vi.fn(), addItem: vi.fn() },
+  api: { search: vi.fn(), addItem: vi.fn(), accumulateItem: vi.fn() },
+  ApiError: class ApiError extends Error {
+    constructor(message: string, public status: number, public code?: string,
+      public details: Record<string, unknown> = {}) { super(message); }
+  },
 }));
 
 const result = {
@@ -19,6 +24,17 @@ describe("AddPositionDialog", () => {
   beforeEach(() => {
     vi.mocked(api.search).mockReset().mockResolvedValue([result]);
     vi.mocked(api.addItem).mockReset().mockResolvedValue({});
+    vi.mocked(api.accumulateItem).mockReset().mockResolvedValue({});
+    vi.restoreAllMocks();
+  });
+
+  it("按市场时区计算默认建仓日期", () => {
+    const beijingMorning = new Date("2026-08-06T01:30:00Z");
+
+    expect(marketLocalDate("A_SHARE", beijingMorning)).toBe("2026-08-06");
+    expect(marketLocalDate("HK_STOCK", beijingMorning)).toBe("2026-08-06");
+    expect(marketLocalDate("PUBLIC_FUND", beijingMorning)).toBe("2026-08-06");
+    expect(marketLocalDate("US_STOCK", beijingMorning)).toBe("2026-08-05");
   });
 
   it("空查询不请求，数量直接输入 1 且成本可输入小数", async () => {
@@ -41,11 +57,34 @@ describe("AddPositionDialog", () => {
     await waitFor(() => expect(api.addItem).toHaveBeenCalledWith({
       instrumentId: "SSE:600519",
       displayName: "贵州茅台",
+      market: "A_SHARE",
+      openedOn: expect.any(String),
       quantity: 1,
       costPrice: 0.25,
       sortOrder: 0,
     }));
     expect(onAdded).toHaveBeenCalledOnce();
+  });
+
+  it("切换市场后按市场隔离搜索并提交建仓日期", async () => {
+    const hk = { ...result, instrumentId: "HKEX:00700", code: "00700", name: "腾讯控股",
+      market: "HK_STOCK" as const, currency: "HKD" as const, exchange: "HKEX" };
+    vi.mocked(api.search).mockResolvedValueOnce([hk]);
+    render(<AddPositionDialog onClose={vi.fn()} onAdded={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "港股" }));
+    fireEvent.change(screen.getByPlaceholderText("输入代码或名称，例如 600519"), {
+      target: { value: "00700" },
+    });
+    await waitFor(() => expect(api.search).toHaveBeenCalledWith(
+      "00700", expect.any(AbortSignal), "HK_STOCK"));
+    fireEvent.click(await screen.findByText("腾讯控股"));
+    fireEvent.change(screen.getByLabelText("建仓日期"), { target: { value: "2026-07-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入盯盘" }));
+
+    await waitFor(() => expect(api.addItem).toHaveBeenCalledWith(expect.objectContaining({
+      market: "HK_STOCK", openedOn: "2026-07-01", instrumentId: "HKEX:00700",
+    })));
   });
 
   it("允许数量 0、成本留空的纯自选", async () => {
@@ -116,6 +155,49 @@ describe("AddPositionDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "加入盯盘" }));
 
     expect(await screen.findByText(/请先核对自选列表/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "加入盯盘" })).toBeEnabled();
+  });
+
+  it("重复持仓确认后按本次数量和成本累加", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(api.addItem).mockRejectedValueOnce(new ApiError(
+      "该持仓已存在，是否累加持仓", 409, "POSITION_ALREADY_EXISTS",
+      { existingPositionId: "position-1" }));
+    const onAdded = vi.fn();
+    render(<AddPositionDialog onClose={vi.fn()} onAdded={onAdded} />);
+    fireEvent.change(screen.getByPlaceholderText("输入代码或名称，例如 600519"), {
+      target: { value: "600519" },
+    });
+    fireEvent.click(await screen.findByText("贵州茅台"));
+    fireEvent.change(screen.getByLabelText("持仓数量"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("单位成本"), { target: { value: "20.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入盯盘" }));
+
+    await waitFor(() => expect(api.accumulateItem).toHaveBeenCalledWith("position-1", {
+      quantity: 100, costPrice: 20.5,
+    }));
+    expect(window.confirm).toHaveBeenCalledWith("该持仓已存在，是否累加持仓？");
+    expect(onAdded).toHaveBeenCalledWith("A_SHARE");
+  });
+
+  it("重复持仓取消后不累加且保留弹窗", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(api.addItem).mockRejectedValueOnce(new ApiError(
+      "该持仓已存在", 409, "POSITION_ALREADY_EXISTS",
+      { existingPositionId: "position-1" }));
+    const onAdded = vi.fn();
+    render(<AddPositionDialog onClose={vi.fn()} onAdded={onAdded} />);
+    fireEvent.change(screen.getByPlaceholderText("输入代码或名称，例如 600519"), {
+      target: { value: "600519" },
+    });
+    fireEvent.click(await screen.findByText("贵州茅台"));
+    fireEvent.change(screen.getByLabelText("持仓数量"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("单位成本"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入盯盘" }));
+
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    expect(api.accumulateItem).not.toHaveBeenCalled();
+    expect(onAdded).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "加入盯盘" })).toBeEnabled();
   });
 });

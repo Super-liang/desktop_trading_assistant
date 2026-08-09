@@ -22,10 +22,12 @@ describe("主窗口可视区布局", () => {
     expect(styles).toContain("@media(max-height:700px)");
   });
 
-  it("手机视口恢复纵向滚动并提供固定移动导航", () => {
+  it("手机视口恢复纵向滚动并提供固定单行四入口导航", () => {
     expect(styles).toContain("html:not(.ticker-surface)");
     expect(styles).toMatch(/html:not\(\.ticker-surface\)[^{]*\{[^}]*overflow-x:hidden[^}]*overflow-y:auto/);
-    expect(styles).toMatch(/\.mobile-nav\{position:fixed[^}]*display:grid[^}]*grid-template-columns:repeat\(3,1fr\)/);
+    expect(styles).toMatch(/\.mobile-nav\{position:fixed[^}]*display:grid[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+    expect(styles).toContain("--mobile-nav-height:64px");
+    expect(styles).not.toContain("116px");
   });
 
   it("手机持仓与管理数据降级为卡片且对话框保持在可视高度内", () => {
@@ -33,5 +35,9 @@ describe("主窗口可视区布局", () => {
     expect(styles).toMatch(/\.dialog\{width:calc\(100vw - 24px\)[^}]*max-height:calc\(100dvh - 24px\)/);
     expect(styles).toContain(".two-fields{grid-template-columns:1fr}");
     expect(styles).toContain(".admin-users-table .admin-row{");
+    expect(styles).toContain(".portfolio-page .list-card{flex:none");
+    expect(styles).toContain(".portfolio-row-actions .icon-button{width:44px;height:44px}");
+    expect(styles).toContain(".portfolio-market-tabs button.active{color:#17211e;background:var(--lime)");
+    expect(styles).toContain(".dialog-backdrop{z-index:50");
   });
 });

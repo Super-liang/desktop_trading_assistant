@@ -41,7 +41,7 @@ public class AkshareConfiguredQuoteProvider implements QuoteProvider {
     public List<InstrumentSearchResult> search(String query) {
         MarketDataConfig config = configService.current();
         if (config.getMode() == MarketDataConfig.Mode.MARKET_SNAPSHOT) {
-            return snapshots.search(config.getSnapshotSource(), query, 20).stream()
+            return snapshots.search(MarketDataConfig.SnapshotSource.SINA, query, 20).stream()
                     .map(value -> {
                         InstrumentId id = InstrumentId.parse(value.instrumentId());
                         return new InstrumentSearchResult(id.canonical(), id.code(), value.name(),
@@ -65,9 +65,8 @@ public class AkshareConfiguredQuoteProvider implements QuoteProvider {
         MarketDataConfig.Mode mode = options != null && options.mode() != null
                 ? options.mode() : config.getMode();
         if (mode == MarketDataConfig.Mode.MARKET_SNAPSHOT) {
-            MarketDataConfig.SnapshotSource source = options != null && options.snapshotSource() != null
-                    ? options.snapshotSource() : config.getSnapshotSource();
-            return snapshots.find(source, instruments);
+            // 旧客户端即使提交 EASTMONEY，也必须读取新浪全市场快照。
+            return snapshots.find(MarketDataConfig.SnapshotSource.SINA, instruments);
         }
         MarketDataConfig.SingleSource source = options != null && options.singleSource() != null
                 ? options.singleSource() : config.getSingleSource();

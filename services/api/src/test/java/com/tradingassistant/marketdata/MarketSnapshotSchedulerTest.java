@@ -1,5 +1,9 @@
 package com.tradingassistant.marketdata;
 
+import com.tradingassistant.market.Market;
+import com.tradingassistant.market.MarketClock;
+import com.tradingassistant.market.MarketPhase;
+import com.tradingassistant.market.MarketStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -15,25 +19,15 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class MarketSnapshotSchedulerTest {
     @Mock MarketDataConfigService configs;
+    @Mock MarketClock marketClock;
     @Mock AkshareGatewayClient gateway;
     @Mock RedisMarketSnapshotRepository snapshots;
 
     @Test
-    void identifiesShanghaiTradingSessions() {
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T01:15:00Z"))).isTrue();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T03:30:00Z"))).isTrue();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T03:30:01Z"))).isFalse();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T04:00:00Z"))).isFalse();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T05:00:00Z"))).isTrue();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T07:00:00Z"))).isTrue();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-22T07:00:01Z"))).isFalse();
-        assertThat(MarketSnapshotScheduler.isTradingTime(Instant.parse("2026-07-25T02:00:00Z"))).isFalse();
-    }
-
-    @Test
-    void doesNotCallUpstreamOutsideTradingHours() {
+    void doesNotCallUpstreamWhenCalendarIsUnknown() {
         when(configs.current()).thenReturn(MarketDataConfig.defaults());
-        var scheduler = new MarketSnapshotScheduler(configs, gateway, snapshots);
+        when(marketClock.status(Market.A_SHARE)).thenReturn(status(MarketPhase.UNKNOWN));
+        var scheduler = new MarketSnapshotScheduler(marketClock, configs, gateway, snapshots);
 
         scheduler.refreshIfDue(Instant.parse("2026-07-22T04:00:00Z"));
 
@@ -41,61 +35,72 @@ class MarketSnapshotSchedulerTest {
     }
 
     @Test
-    void refreshesBothSourcesWhenTheirDistributedLocksAreAcquired() {
+    void refreshesOnlySinaWhenItsDistributedLockIsAcquired() {
         MarketDataConfig config = MarketDataConfig.defaults();
         when(configs.current()).thenReturn(config);
-        for (MarketDataConfig.SnapshotSource source : MarketDataConfig.SnapshotSource.values()) {
-            when(snapshots.acquireRefreshLock(source, 30))
-                    .thenReturn(Optional.of("lock-" + source));
-            when(gateway.marketSnapshot(source))
-                    .thenReturn(List.of(mock(com.tradingassistant.quote.Quote.class)));
-        }
-        var scheduler = new MarketSnapshotScheduler(configs, gateway, snapshots);
+        when(marketClock.status(Market.A_SHARE)).thenReturn(status(MarketPhase.OPEN));
+        when(snapshots.acquireRefreshLock(MarketDataConfig.SnapshotSource.SINA, 30))
+                .thenReturn(Optional.of("lock-SINA"));
+        when(gateway.marketSnapshot(MarketDataConfig.SnapshotSource.SINA))
+                .thenReturn(List.of(mock(com.tradingassistant.quote.Quote.class)));
+        var scheduler = new MarketSnapshotScheduler(marketClock, configs, gateway, snapshots);
 
         scheduler.refreshIfDue(Instant.parse("2026-07-22T02:00:00Z"));
 
-        for (MarketDataConfig.SnapshotSource source : MarketDataConfig.SnapshotSource.values()) {
-            verify(snapshots).replace(eq(source), anyList());
-            verify(snapshots).releaseRefreshLock(source, "lock-" + source);
-        }
+        verify(snapshots).replace(eq(MarketDataConfig.SnapshotSource.SINA), anyList());
+        verify(snapshots).releaseRefreshLock(MarketDataConfig.SnapshotSource.SINA, "lock-SINA");
+        verify(gateway, never()).marketSnapshot(MarketDataConfig.SnapshotSource.EASTMONEY);
         scheduler.shutdown();
     }
 
     @Test
-    void refreshesBothSourcesWhenServerDefaultModeIsSingleStock() {
+    void refreshesSinaWhenServerDefaultModeIsSingleStock() {
         MarketDataConfig config = MarketDataConfig.defaults();
         config.update(MarketDataConfig.Provider.AKSHARE, MarketDataConfig.Mode.SINGLE_STOCK,
                 MarketDataConfig.SnapshotSource.EASTMONEY,
                 MarketDataConfig.SingleSource.XUEQIU, 30);
         when(configs.current()).thenReturn(config);
+        when(marketClock.status(Market.A_SHARE)).thenReturn(status(MarketPhase.OPEN));
         when(snapshots.acquireRefreshLock(any(), eq(30)))
                 .thenAnswer(invocation -> Optional.of("lock-" + invocation.getArgument(0)));
         when(gateway.marketSnapshot(any()))
                 .thenReturn(List.of(mock(com.tradingassistant.quote.Quote.class)));
-        var scheduler = new MarketSnapshotScheduler(configs, gateway, snapshots);
+        var scheduler = new MarketSnapshotScheduler(marketClock, configs, gateway, snapshots);
 
         scheduler.refreshIfDue(Instant.parse("2026-07-22T02:00:00Z"));
 
         verify(gateway).marketSnapshot(MarketDataConfig.SnapshotSource.SINA);
-        verify(gateway).marketSnapshot(MarketDataConfig.SnapshotSource.EASTMONEY);
+        verify(gateway, never()).marketSnapshot(MarketDataConfig.SnapshotSource.EASTMONEY);
         scheduler.shutdown();
     }
 
     @Test
-    void refreshesSourcesInParallel() {
+    void refreshesOpenMarketsInParallel() {
         when(configs.current()).thenReturn(MarketDataConfig.defaults());
-        when(snapshots.acquireRefreshLock(any(), eq(30)))
-                .thenAnswer(invocation -> Optional.of("lock-" + invocation.getArgument(0)));
+        when(marketClock.status(Market.A_SHARE)).thenReturn(status(MarketPhase.OPEN));
+        when(marketClock.status(Market.HK_STOCK)).thenReturn(status(Market.HK_STOCK, MarketPhase.OPEN));
+        when(snapshots.acquireRefreshLock(MarketDataConfig.SnapshotSource.SINA, 30))
+                .thenReturn(Optional.of("a-lock"));
+        when(snapshots.acquireRefreshLock(Market.HK_STOCK,
+                MarketDataConfig.SnapshotSource.SINA, 30)).thenReturn(Optional.of("hk-lock"));
         AtomicInteger active = new AtomicInteger();
         AtomicInteger maximum = new AtomicInteger();
-        when(gateway.marketSnapshot(any())).thenAnswer(invocation -> {
+        when(gateway.marketSnapshot(MarketDataConfig.SnapshotSource.SINA)).thenAnswer(invocation -> {
             int current = active.incrementAndGet();
             maximum.accumulateAndGet(current, Math::max);
             Thread.sleep(80);
             active.decrementAndGet();
             return List.of(mock(com.tradingassistant.quote.Quote.class));
         });
-        var scheduler = new MarketSnapshotScheduler(configs, gateway, snapshots);
+        when(gateway.marketSnapshot(Market.HK_STOCK,
+                MarketDataConfig.SnapshotSource.SINA)).thenAnswer(invocation -> {
+            int current = active.incrementAndGet();
+            maximum.accumulateAndGet(current, Math::max);
+            Thread.sleep(80);
+            active.decrementAndGet();
+            return List.of(mock(com.tradingassistant.quote.Quote.class));
+        });
+        var scheduler = new MarketSnapshotScheduler(marketClock, configs, gateway, snapshots);
 
         scheduler.refreshIfDue(Instant.parse("2026-07-22T02:00:00Z"));
 
@@ -104,22 +109,52 @@ class MarketSnapshotSchedulerTest {
     }
 
     @Test
-    void oneSourceFailureDoesNotPreventTheOtherFromBeingStored() {
+    void sinaFailureDoesNotOverwriteLastSnapshot() {
         when(configs.current()).thenReturn(MarketDataConfig.defaults());
+        when(marketClock.status(Market.A_SHARE)).thenReturn(status(MarketPhase.OPEN));
         when(snapshots.acquireRefreshLock(any(), eq(30)))
                 .thenAnswer(invocation -> Optional.of("lock-" + invocation.getArgument(0)));
         when(gateway.marketSnapshot(MarketDataConfig.SnapshotSource.SINA))
                 .thenThrow(new IllegalStateException("upstream down"));
-        when(gateway.marketSnapshot(MarketDataConfig.SnapshotSource.EASTMONEY))
-                .thenReturn(List.of(mock(com.tradingassistant.quote.Quote.class)));
-        var scheduler = new MarketSnapshotScheduler(configs, gateway, snapshots);
+        var scheduler = new MarketSnapshotScheduler(marketClock, configs, gateway, snapshots);
 
         scheduler.refreshIfDue(Instant.parse("2026-07-22T02:00:00Z"));
 
-        verify(snapshots).replace(eq(MarketDataConfig.SnapshotSource.EASTMONEY), anyList());
         verify(snapshots, never()).replace(eq(MarketDataConfig.SnapshotSource.SINA), anyList());
         verify(snapshots).releaseRefreshLock(eq(MarketDataConfig.SnapshotSource.SINA), anyString());
-        verify(snapshots).releaseRefreshLock(eq(MarketDataConfig.SnapshotSource.EASTMONEY), anyString());
         scheduler.shutdown();
+    }
+
+    @Test
+    void refreshesOnlyFullMarketRoutesAndNeverRequestsUsFullSnapshot() {
+        when(configs.current()).thenReturn(MarketDataConfig.defaults());
+        when(marketClock.status(Market.A_SHARE)).thenReturn(status(MarketPhase.CLOSED));
+        when(marketClock.status(Market.HK_STOCK)).thenReturn(status(
+                Market.HK_STOCK, MarketPhase.OPEN));
+        when(snapshots.acquireRefreshLock(any(Market.class), any(), eq(30)))
+                .thenReturn(Optional.of("market-lock"));
+        when(gateway.marketSnapshot(any(Market.class), any()))
+                .thenReturn(List.of(mock(com.tradingassistant.quote.Quote.class)));
+        var scheduler = new MarketSnapshotScheduler(marketClock, configs, gateway, snapshots);
+
+        scheduler.refreshIfDue(Instant.parse("2026-07-22T14:00:00Z"));
+
+        verify(gateway).marketSnapshot(Market.HK_STOCK,
+                MarketDataConfig.SnapshotSource.SINA);
+        verify(snapshots).replace(eq(Market.HK_STOCK),
+                eq(MarketDataConfig.SnapshotSource.SINA), anyList());
+        verify(gateway, never()).marketSnapshot(eq(Market.US_STOCK), any());
+        verify(gateway, never()).marketSnapshot(any(Market.class),
+                eq(MarketDataConfig.SnapshotSource.EASTMONEY));
+        scheduler.shutdown();
+    }
+
+    private MarketStatus status(MarketPhase phase) {
+        return status(Market.A_SHARE, phase);
+    }
+
+    private MarketStatus status(Market market, MarketPhase phase) {
+        return new MarketStatus(market, phase, null, null, "TEST", Instant.now(),
+                phase != MarketPhase.UNKNOWN);
     }
 }

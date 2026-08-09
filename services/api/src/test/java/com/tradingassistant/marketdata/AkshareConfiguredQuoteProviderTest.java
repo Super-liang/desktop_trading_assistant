@@ -19,7 +19,7 @@ class AkshareConfiguredQuoteProviderTest {
         when(configs.current()).thenReturn(MarketDataConfig.defaults());
         var instrument = InstrumentId.parse("600519");
         Quote quote = mock(Quote.class);
-        when(redis.find(MarketDataConfig.SnapshotSource.EASTMONEY, List.of(instrument)))
+        when(redis.find(MarketDataConfig.SnapshotSource.SINA, List.of(instrument)))
                 .thenReturn(List.of(quote));
         var provider = new AkshareConfiguredQuoteProvider(configs, redis, gateway, properties());
 
@@ -28,7 +28,7 @@ class AkshareConfiguredQuoteProviderTest {
     }
 
     @Test
-    void requestSnapshotSourceOverridesDefaultWithoutChangingGlobalConfig() {
+    void removedEastmoneySnapshotRequestIsNormalizedToSina() {
         var configs = mock(MarketDataConfigService.class);
         var redis = mock(RedisMarketSnapshotRepository.class);
         var gateway = mock(AkshareGatewayClient.class);
@@ -42,9 +42,9 @@ class AkshareConfiguredQuoteProviderTest {
 
         assertThat(provider.snapshots(List.of(instrument),
                 new QuoteRequestOptions(MarketDataConfig.Mode.MARKET_SNAPSHOT,
-                        MarketDataConfig.SnapshotSource.SINA, null)))
+                        MarketDataConfig.SnapshotSource.EASTMONEY, null)))
                 .containsExactly(quote);
-        assertThat(config.getSnapshotSource()).isEqualTo(MarketDataConfig.SnapshotSource.EASTMONEY);
+        assertThat(config.getSnapshotSource()).isEqualTo(MarketDataConfig.SnapshotSource.SINA);
         verifyNoInteractions(gateway);
     }
 

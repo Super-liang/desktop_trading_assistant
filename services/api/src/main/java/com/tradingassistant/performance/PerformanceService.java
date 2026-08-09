@@ -1,6 +1,6 @@
 package com.tradingassistant.performance;
 
-import com.tradingassistant.marketdata.MarketDataConfig;
+import com.tradingassistant.market.Market;
 import com.tradingassistant.portfolio.PortfolioItem;
 import com.tradingassistant.portfolio.PortfolioRepository;
 import com.tradingassistant.quote.*;
@@ -25,7 +25,8 @@ public class PerformanceService {
 
     public PerformanceSummary current(UUID userId) {
         LocalDate today = LocalDate.now(CHINA);
-        List<PortfolioItem> owned = portfolios.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(userId);
+        List<PortfolioItem> owned = portfolios.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(userId)
+                .stream().filter(item -> item.getMarket() == Market.A_SHARE).toList();
         Map<String, Quote> latest = latest(owned);
         var intraday = PerformanceCalculator.intraday(owned.stream().map(item -> {
             Quote quote = latest.get(item.canonical());
@@ -41,10 +42,7 @@ public class PerformanceService {
                         .orElse(PerformanceStatus.ACCUMULATING)
                 : intraday.status();
         return new PerformanceSummary(intraday.dailyProfit(), intraday.dailyReturnPercent(),
-                settled.map(UserPerformanceDaily::getYearProfit).orElse(null),
-                settled.map(UserPerformanceDaily::getYearReturnPercent).orElse(null),
-                settled.map(UserPerformanceDaily::getAnnualizedReturnPercent).orElse(null),
-                settled.map(UserPerformanceDaily::getStatisticsStartDate).orElse(null),
+                null, null, null, null,
                 Instant.now(), status, intraday.missingQuoteCount(),
                 PerformanceSummary.REFERENCE_NOTICE);
     }

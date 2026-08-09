@@ -3,6 +3,7 @@ package com.tradingassistant.performance;
 import com.tradingassistant.auth.User;
 import com.tradingassistant.auth.UserRepository;
 import com.tradingassistant.marketdata.MarketDataConfig;
+import com.tradingassistant.market.Market;
 import com.tradingassistant.portfolio.PortfolioItem;
 import com.tradingassistant.portfolio.PortfolioRepository;
 import com.tradingassistant.quote.*;
@@ -52,7 +53,8 @@ public class PerformanceSettlementScheduler {
     }
 
     private void settleUser(UUID userId, LocalDate date) {
-        List<PortfolioItem> owned = portfolios.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(userId);
+        List<PortfolioItem> owned = portfolios.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(userId)
+                .stream().filter(item -> item.getMarket() == Market.A_SHARE).toList();
         Map<String, Quote> latest = settlementQuotes(owned);
         var intraday = PerformanceCalculator.intraday(owned.stream().map(item -> {
             Quote quote = latest.get(item.canonical());
@@ -60,25 +62,9 @@ public class PerformanceSettlementScheduler {
                     quote == null ? null : quote.last(),
                     quote == null ? null : quote.previousClose(), quote != null);
         }).toList());
-        List<PerformanceCalculator.DailyReturn> history = daily
-                .findAllByIdUserIdAndIdTradingDateBetweenOrderByIdTradingDateAsc(
-                        userId, date.withDayOfYear(1), date.minusDays(1)).stream()
-                .filter(value -> value.getDailyProfit() != null
-                        && value.getDailyReturnPercent() != null
-                        && value.getStatus() != PerformanceStatus.PARTIAL
-                        && value.getStatus() != PerformanceStatus.UNAVAILABLE)
-                .map(value -> new PerformanceCalculator.DailyReturn(
-                        value.getId().getTradingDate(), value.getDailyProfit(),
-                        value.getDailyReturnPercent())).collect(Collectors.toCollection(ArrayList::new));
-        if (intraday.status() == PerformanceStatus.COMPLETE
-                && intraday.dailyProfit() != null && intraday.dailyReturnPercent() != null) {
-            history.add(new PerformanceCalculator.DailyReturn(date,
-                    intraday.dailyProfit(), intraday.dailyReturnPercent()));
-        }
-        var year = PerformanceCalculator.yearToDate(date, history);
         UserPerformanceDaily record = daily.findById(new UserPerformanceDaily.Id(userId, date))
                 .orElseGet(() -> new UserPerformanceDaily(userId, date));
-        record.update(intraday, year, SETTLEMENT_SOURCE, Instant.now());
+        record.updateLegacyDaily(intraday, SETTLEMENT_SOURCE, Instant.now());
         daily.save(record);
         log.info("用户参考收益日终结算：userId={},date={},status={}",
                 userId, date, record.getStatus());
@@ -90,7 +76,7 @@ public class PerformanceSettlementScheduler {
             return quotes.snapshots(owned.stream().map(item ->
                             InstrumentId.parse(item.canonical())).toList(),
                     new QuoteRequestOptions(MarketDataConfig.Mode.MARKET_SNAPSHOT,
-                            MarketDataConfig.SnapshotSource.EASTMONEY, null))
+                            MarketDataConfig.SnapshotSource.SINA, null))
                     .stream().collect(Collectors.toMap(Quote::instrumentId, value -> value,
                             (first, ignored) -> first));
         } catch (QuoteUnavailableException exception) {

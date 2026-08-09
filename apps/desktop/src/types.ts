@@ -25,10 +25,18 @@ export type Quote = {
   demo: boolean;
 };
 
+export type Market = "A_SHARE" | "HK_STOCK" | "US_STOCK" | "PUBLIC_FUND";
+export type Currency = "CNY" | "HKD" | "USD";
+
 export type PortfolioItem = {
   id: string;
   instrumentId: string;
   displayName: string;
+  market?: Market;
+  exchange?: string;
+  currency?: Currency;
+  assetType?: "STOCK" | "ETF" | "OPEN_END_FUND" | "INDEX";
+  openedOn?: string;
   quantity: number;
   costPrice: number;
   sortOrder: number;
@@ -62,10 +70,49 @@ export type PerformanceSummary = {
   referenceNotice: string;
 };
 
+export type PositionReturn = {
+  positionId: string;
+  instrumentId: string;
+  displayName: string;
+  market: Market;
+  currency: Currency;
+  currentPrice: number | null;
+  valueDate: string | null;
+  quoteAsOf: string | null;
+  delayed: boolean;
+  stale: boolean;
+  dailyProfit: number | null;
+  dailyReturnPercent: number | null;
+  holdingProfit: number | null;
+  holdingReturnPercent: number | null;
+  dailyStatus: PerformanceStatus;
+  unavailableReason: string | null;
+};
+
+export type ReturnGroup = {
+  market: Market;
+  currency: Currency;
+  dailyProfit: number | null;
+  dailyReturnPercent: number | null;
+  holdingProfit: number | null;
+  holdingReturnPercent: number | null;
+  dailyStatus: PerformanceStatus;
+  unavailableDailyCount: number;
+  items: PositionReturn[];
+};
+
+export type PortfolioReturns = {
+  groups: ReturnGroup[];
+  calculatedAt: string;
+  calculationNotice: string;
+};
+
 export type SearchResult = {
   instrumentId: string;
   code: string;
   name: string;
+  market?: Market;
+  currency?: Currency;
   exchange: string;
   assetType: string;
 };
@@ -136,4 +183,28 @@ export type MarketDataStatus = {
   mode: "MARKET_SNAPSHOT" | "SINGLE_STOCK";
   components: MarketDataComponentStatus[];
   checkedAt: string;
+};
+
+export type MarketIndexQuote = {
+  instrumentId: string;
+  code: string;
+  name: string;
+  price?: number | null;
+  change?: number | null;
+  changePercent?: number | null;
+  open?: number | null;
+  previousClose?: number | null;
+  source: string;
+  quoteAsOf: string;
+  available: boolean;
+  lastSuccessAt?: string | null;
+  stale: boolean;
+};
+
+export type MarketStatus = {
+  market: Market;
+  phase: "PRE_OPEN" | "OPEN" | "BREAK" | "CLOSED" | "HOLIDAY" | "UNKNOWN";
+  nextOpenAt?: string | null;
+  nextCloseAt?: string | null;
+  calendarAvailable: boolean;
 };

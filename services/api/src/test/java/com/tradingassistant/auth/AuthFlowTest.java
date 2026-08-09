@@ -151,9 +151,18 @@ class AuthFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.dailyProfit").value(0))
                 .andExpect(jsonPath("$.dailyReturnPercent").value(0))
+                .andExpect(jsonPath("$.yearProfit").doesNotExist())
+                .andExpect(jsonPath("$.yearReturnPercent").doesNotExist())
+                .andExpect(jsonPath("$.annualizedReturnPercent").doesNotExist())
                 .andExpect(jsonPath("$.status").value("ACCUMULATING"))
                 .andExpect(jsonPath("$.referenceNotice").isNotEmpty());
         mvc.perform(get("/api/v1/me/performance")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/me/returns")
+                        .header("Authorization", "Bearer " + session.get("accessToken").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups").isEmpty())
+                .andExpect(jsonPath("$.calculationNotice").isNotEmpty());
+        mvc.perform(get("/api/v1/me/returns")).andExpect(status().isUnauthorized());
     }
 
     private org.springframework.test.web.servlet.ResultActions changePassword(String bearer,

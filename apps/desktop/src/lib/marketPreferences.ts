@@ -25,10 +25,6 @@ function validMode(value: string | null): value is MarketMode {
   return value === "MARKET_SNAPSHOT" || value === "SINGLE_STOCK";
 }
 
-function validSource(value: string | null): value is SnapshotSource {
-  return value === "SINA" || value === "EASTMONEY";
-}
-
 function validSingleSource(value: string | null): value is SingleSource {
   return value === "EASTMONEY" || value === "XUEQIU";
 }
@@ -41,15 +37,17 @@ export function readMarketPreferences(
   defaultMode: MarketMode,
   defaultSource: SnapshotSource,
   defaultSingleSource: SingleSource,
-  storage: Pick<Storage, "getItem"> = window.localStorage,
+  storage: Pick<Storage, "getItem" | "setItem"> = window.localStorage,
 ): MarketPreferences {
   const savedMode = storage.getItem(MODE_STORAGE_KEY);
   const savedSource = storage.getItem(SNAPSHOT_SOURCE_STORAGE_KEY);
   const savedSingleSource = storage.getItem(SINGLE_SOURCE_STORAGE_KEY);
   const savedRefresh = Number(storage.getItem(SINGLE_REFRESH_STORAGE_KEY));
+  // 全市场东财线路已移除；读取旧客户端偏好时就地迁移，避免后续窗口继续传播旧值。
+  if (savedSource !== "SINA") storage.setItem(SNAPSHOT_SOURCE_STORAGE_KEY, "SINA");
   return {
     mode: validMode(savedMode) ? savedMode : defaultMode,
-    snapshotSource: validSource(savedSource) ? savedSource : defaultSource,
+    snapshotSource: "SINA",
     singleSource: validSingleSource(savedSingleSource) ? savedSingleSource : defaultSingleSource,
     singleRefreshSeconds: validRefresh(savedRefresh)
       ? savedRefresh : DEFAULT_SINGLE_REFRESH_SECONDS,
@@ -60,14 +58,15 @@ export function saveMarketPreferences(
   preferences: MarketPreferences,
   storage: Pick<Storage, "setItem"> = window.localStorage,
 ) {
-  storage.setItem(MODE_STORAGE_KEY, preferences.mode);
-  storage.setItem(SNAPSHOT_SOURCE_STORAGE_KEY, preferences.snapshotSource);
-  storage.setItem(SINGLE_SOURCE_STORAGE_KEY, preferences.singleSource);
-  storage.setItem(SINGLE_REFRESH_STORAGE_KEY, String(preferences.singleRefreshSeconds));
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: preferences }));
+  const normalized = { ...preferences, snapshotSource: "SINA" as const };
+  storage.setItem(MODE_STORAGE_KEY, normalized.mode);
+  storage.setItem(SNAPSHOT_SOURCE_STORAGE_KEY, normalized.snapshotSource);
+  storage.setItem(SINGLE_SOURCE_STORAGE_KEY, normalized.singleSource);
+  storage.setItem(SINGLE_REFRESH_STORAGE_KEY, String(normalized.singleRefreshSeconds));
+  window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: normalized }));
   if ("__TAURI_INTERNALS__" in window) {
     void import("@tauri-apps/api/event")
-      .then(({ emit }) => emit(CHANGE_EVENT, preferences))
+      .then(({ emit }) => emit(CHANGE_EVENT, normalized))
       .catch(() => undefined);
   }
 }
@@ -97,7 +96,8 @@ export function useMarketPreferences(defaultMode: MarketMode,
       readMarketPreferences(defaultMode, defaultSource, defaultSingleSource));
     const receive = (event: Event) => {
       const detail = (event as CustomEvent<MarketPreferences>).detail;
-      setPreferences(detail ?? readMarketPreferences(defaultMode, defaultSource, defaultSingleSource));
+      setPreferences(detail ? { ...detail, snapshotSource: "SINA" }
+        : readMarketPreferences(defaultMode, defaultSource, defaultSingleSource));
     };
     window.addEventListener("storage", reload);
     window.addEventListener(CHANGE_EVENT, receive);
@@ -106,7 +106,7 @@ export function useMarketPreferences(defaultMode: MarketMode,
       void import("@tauri-apps/api/event")
         .then(async ({ listen }) => {
           unlisten = await listen<MarketPreferences>(CHANGE_EVENT, (event) => {
-            if (event.payload) setPreferences(event.payload);
+            if (event.payload) setPreferences({ ...event.payload, snapshotSource: "SINA" });
           });
         })
         .catch(() => undefined);

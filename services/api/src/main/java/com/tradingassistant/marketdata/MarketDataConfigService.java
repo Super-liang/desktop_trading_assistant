@@ -19,14 +19,18 @@ public class MarketDataConfigService {
 
     @Transactional
     public MarketDataConfig current() {
-        return repository.findById(1).orElseGet(() -> repository.save(MarketDataConfig.defaults()));
+        MarketDataConfig config = repository.findById(1)
+                .orElseGet(() -> repository.save(MarketDataConfig.defaults()));
+        // 滚动升级时将数据库中的历史东财全市场配置自动迁移为新浪。
+        config.normalizeSnapshotSource();
+        return config;
     }
 
     @Transactional
     public MarketDataConfig update(UUID actorId, UpdateRequest request) {
         validate(request);
         MarketDataConfig config = current();
-        config.update(request.provider(), request.mode(), request.snapshotSource(),
+        config.update(request.provider(), request.mode(), MarketDataConfig.SnapshotSource.SINA,
                 request.singleSource(), request.refreshSeconds());
         audits.save(new AdminAudit(actorId, "MARKET_DATA_CONFIG_UPDATED", null, "SUCCESS"));
         return config;
@@ -34,11 +38,11 @@ public class MarketDataConfigService {
 
     private void validate(UpdateRequest request) {
         if (request.provider() == null || request.mode() == null
-                || request.snapshotSource() == null || request.singleSource() == null) {
+                || request.singleSource() == null) {
             throw new IllegalArgumentException("行情源配置字段不能为空");
         }
         if (request.refreshSeconds() < 30 || request.refreshSeconds() > 300) {
-            throw new IllegalArgumentException("双源全市场刷新频率必须在 30 到 300 秒之间");
+            throw new IllegalArgumentException("全市场刷新频率必须在 30 到 300 秒之间");
         }
     }
 

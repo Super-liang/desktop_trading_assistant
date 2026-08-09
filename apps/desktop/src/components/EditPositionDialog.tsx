@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { api } from "../lib/api";
+import { marketLocalDate } from "../lib/marketDate";
 import type { PortfolioItem } from "../types";
 
 export function EditPositionDialog({ item, onClose, onSaved }: {
@@ -8,6 +9,8 @@ export function EditPositionDialog({ item, onClose, onSaved }: {
 }) {
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [costPrice, setCostPrice] = useState(item.costPrice > 0 ? String(item.costPrice) : "");
+  const [openedOn, setOpenedOn] = useState(
+    item.openedOn ?? marketLocalDate(item.market ?? "A_SHARE"));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -28,6 +31,8 @@ export function EditPositionDialog({ item, onClose, onSaved }: {
       await api.updateItem(item.id, {
         instrumentId: item.instrumentId,
         displayName: item.displayName,
+        market: item.market ?? "A_SHARE",
+        openedOn,
         quantity: parsedQuantity,
         costPrice: parsedCost,
         sortOrder: item.sortOrder,
@@ -53,6 +58,10 @@ export function EditPositionDialog({ item, onClose, onSaved }: {
           <label>单位成本<input type="text" inputMode="decimal" value={costPrice}
             placeholder="无持仓可留空" onChange={(event) => setCostPrice(event.target.value)} /></label>
         </div>
+        <label>建仓日期<input type="date" value={openedOn}
+          max={marketLocalDate(item.market ?? "A_SHARE")}
+          onChange={(event) => setOpenedOn(event.target.value)} /></label>
+        <p className="dialog-hint">市场：{item.market ?? "A_SHARE"} · 证券代码不可修改</p>
         {error && <div className="form-error">{error}</div>}
         <button className="primary-button" disabled={saving}>{saving ? "正在保存…" : "保存持仓"}</button>
       </form>

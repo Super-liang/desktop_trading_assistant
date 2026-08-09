@@ -18,6 +18,30 @@ class SingleSource(str, Enum):
     XUEQIU = "XUEQIU"
 
 
+@dataclass(frozen=True)
+class SourceCapability:
+    market: str
+    capability: str
+    source: str
+    delayed: bool
+
+    @property
+    def source_id(self) -> str:
+        return f"{self.market}:{self.capability}:{self.source}"
+
+
+SOURCE_CAPABILITIES = (
+    SourceCapability("A_SHARE", "SNAPSHOT", "SINA", True),
+    SourceCapability("A_SHARE", "SINGLE", "EASTMONEY", True),
+    SourceCapability("A_SHARE", "SINGLE", "XUEQIU", True),
+    SourceCapability("A_SHARE", "INDEX", "EASTMONEY", True),
+    SourceCapability("A_SHARE", "INDEX", "SINA", True),
+    SourceCapability("HK_STOCK", "SNAPSHOT", "SINA", True),
+    SourceCapability("US_STOCK", "POSITION", "SINA", True),
+    SourceCapability("PUBLIC_FUND", "UNIT_NAV", "EASTMONEY", True),
+)
+
+
 @dataclass
 class SourceHealth:
     source: str
@@ -68,7 +92,9 @@ class SourceHealthRegistry:
     def all(self) -> list[dict]:
         with self._lock:
             configured = [
-                *(f"SNAPSHOT_{source.value}" for source in MarketSource),
+                *(item.source_id for item in SOURCE_CAPABILITIES),
+                "SNAPSHOT_SINA",
                 *(f"SINGLE_{source.value}" for source in SingleSource),
+                "CALENDAR_A_SHARE_CHECK",
             ]
             return [asdict(self._states.get(name, SourceHealth(source=name))) for name in configured]

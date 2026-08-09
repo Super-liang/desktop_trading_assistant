@@ -173,7 +173,7 @@ describe("TickerWindow", () => {
     render(<QueryClientProvider client={queryClient}><TickerWindow /></QueryClientProvider>);
 
     await waitFor(() => expect(portfolio).toHaveBeenCalledWith(
-      "MARKET_SNAPSHOT", "EASTMONEY", "XUEQIU"));
+      "MARKET_SNAPSHOT", "SINA", "XUEQIU"));
   });
 
   it("主窗可见时消费共享行情，主窗隐藏后才接管查询", async () => {
@@ -185,7 +185,7 @@ describe("TickerWindow", () => {
     expect(native.emitTo).toHaveBeenCalledWith("main", "ticker-data-ready");
     expect(portfolio).not.toHaveBeenCalled();
     act(() => native.listeners.get("portfolio-sync")?.[0]?.({ payload: {
-      mode: "MARKET_SNAPSHOT", snapshotSource: "EASTMONEY", singleSource: "EASTMONEY",
+      mode: "MARKET_SNAPSHOT", snapshotSource: "SINA", singleSource: "EASTMONEY",
       data: {
         items: [], totalProfit: 88, totalMarketValue: 1000, unavailableQuoteCount: 0,
       },

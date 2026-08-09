@@ -38,11 +38,12 @@ describe("MarketDataSettings", () => {
     apiMocks.updateMarketDataConfig.mockResolvedValue({});
   });
 
-  it("普通用户可切换本机模式和快照来源但不能修改服务端配置", async () => {
+  it("普通用户看到固定新浪快照并可切换本机模式", async () => {
     renderSettings(false);
 
     expect(await screen.findByText("AKShare 行情配置")).toBeInTheDocument();
-    fireEvent.click(await screen.findByLabelText(/新浪财经/));
+    expect(await screen.findByLabelText(/新浪财经全市场行情/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/东方财富.*全市场/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /单只股票模式/ }));
     fireEvent.click(screen.getByRole("button", { name: /保存本机设置/ }));
     expect(window.localStorage.getItem("market.snapshotSource")).toBe("SINA");
@@ -66,7 +67,7 @@ describe("MarketDataSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
     await waitFor(() => expect(apiMocks.updateMarketDataConfig).toHaveBeenCalledWith(expect.objectContaining({
-      mode: "SINGLE_STOCK", singleSource: "XUEQIU",
+      mode: "SINGLE_STOCK", snapshotSource: "SINA", singleSource: "XUEQIU",
     })));
   });
 

@@ -1,8 +1,9 @@
 import { BriefcaseBusiness, Plus } from "lucide-react";
 import { useState } from "react";
 import { money, percent } from "../lib/format";
-import type { MarketDataConfig, PerformanceSummary, PortfolioSummary } from "../types";
+import type { Currency, Market, MarketDataConfig, PortfolioReturns, PortfolioSummary } from "../types";
 import { MarketStatusLights } from "./MarketStatusLights";
+import { MarketIndexCarousel } from "./MarketIndexCarousel";
 
 const statusLabel = {
   COMPLETE: "数据完整",
@@ -11,25 +12,31 @@ const statusLabel = {
   ACCUMULATING: "数据积累中",
 } as const;
 
-function signedMoney(value: number | null) {
+const marketLabel: Record<Market, string> = {
+  A_SHARE: "A股", HK_STOCK: "港股", US_STOCK: "美股", PUBLIC_FUND: "公募基金",
+};
+const currencySymbol: Record<Currency, string> = { CNY: "¥", HKD: "HK$", USD: "$" };
+
+function signedMoney(value: number | null, currency: Currency) {
   if (value == null) return "--";
-  return `${value >= 0 ? "+" : "-"}¥ ${money(Math.abs(value))}`;
+  return `${value >= 0 ? "+" : "-"}${currencySymbol[currency]} ${money(Math.abs(value))}`;
 }
 
 function valueClass(value: number | null) {
   return value == null ? "" : value >= 0 ? "up" : "down";
 }
 
-export function HomePage({ data, performance, performanceLoading, performanceError, quoteBadge,
-  quoteNotice, marketMode, singleSource, visible, refreshSeconds, singleRefreshSeconds, onAdd,
+export function HomePage({ data, returns, returnsLoading, returnsError, quoteBadge,
+  quoteNotice, marketMode, snapshotSource, singleSource, visible, refreshSeconds, singleRefreshSeconds, onAdd,
   onOpenPortfolio }: {
   data?: PortfolioSummary;
-  performance?: PerformanceSummary;
-  performanceLoading: boolean;
-  performanceError: boolean;
+  returns?: PortfolioReturns;
+  returnsLoading: boolean;
+  returnsError: boolean;
   quoteBadge: string;
   quoteNotice: string;
   marketMode: MarketDataConfig["mode"];
+  snapshotSource: MarketDataConfig["snapshotSource"];
   singleSource: MarketDataConfig["singleSource"];
   visible: boolean;
   refreshSeconds?: number;
@@ -38,11 +45,7 @@ export function HomePage({ data, performance, performanceLoading, performanceErr
   onOpenPortfolio: () => void;
 }) {
   const [display, setDisplay] = useState<"AMOUNT" | "RATE">("AMOUNT");
-  const daily = display === "AMOUNT" ? performance?.dailyProfit ?? null
-    : performance?.dailyReturnPercent ?? null;
-  const year = display === "AMOUNT" ? performance?.yearProfit ?? null
-    : performance?.yearReturnPercent ?? null;
-  const unavailable = performanceLoading || performanceError || !performance;
+  const unavailable = returnsLoading || returnsError || !returns;
 
   return <main className="workspace home-page">
     <header className="workspace-header">
@@ -56,31 +59,35 @@ export function HomePage({ data, performance, performanceLoading, performanceErr
       </div>
     </header>
     <div className="demo-banner"><span>{quoteBadge}</span>{quoteNotice}</div>
-    <MarketStatusLights mode={marketMode} singleSource={singleSource} enabled={visible} />
+    <MarketStatusLights collapsible mode={marketMode} singleSource={singleSource} enabled={visible} />
+    <MarketIndexCarousel source={snapshotSource} enabled={visible} />
     <div className="performance-toolbar" role="group" aria-label="收益展示方式">
       <span>收益展示</span><button className={display === "AMOUNT" ? "active" : ""}
         onClick={() => setDisplay("AMOUNT")}>金额</button>
       <button className={display === "RATE" ? "active" : ""}
         onClick={() => setDisplay("RATE")}>比率</button>
     </div>
-    <section className="summary-grid performance-grid">
-      <article className="summary-card featured"><small>{display === "AMOUNT" ? "我的日收益" : "我的日收益率"}</small>
-        <strong className={valueClass(daily)}>{unavailable ? "--" : display === "AMOUNT"
-          ? signedMoney(daily) : daily == null ? "--" : percent(daily)}</strong>
-        <span>{performance?.calculatedAt ? `计算于 ${new Date(performance.calculatedAt).toLocaleString("zh-CN")}` : "等待收益数据"}</span>
-      </article>
-      <article className="summary-card"><small>{display === "AMOUNT" ? "我的本年收益" : "我的本年收益率"}</small>
-        <strong className={valueClass(year)}>{unavailable ? "--" : display === "AMOUNT"
-          ? signedMoney(year) : year == null ? "--" : percent(year)}</strong>
-        <span>{display === "RATE" && performance?.annualizedReturnPercent != null
-          ? `年化收益率 ${percent(performance.annualizedReturnPercent)}`
-          : performance?.status === "ACCUMULATING" ? "年化收益率尚在积累"
-            : performance?.statisticsStartDate ? `统计始于 ${performance.statisticsStartDate}` : "尚无年度统计"}</span>
-      </article>
-      <article className="summary-card"><small>数据状态</small><strong className="status-live"><i />
-        {performanceError ? "收益服务暂不可用" : statusLabel[performance?.status ?? "UNAVAILABLE"]}</strong>
-        <span>{performance?.missingQuoteCount ? `${performance.missingQuoteCount} 只证券行情缺失` : marketMode === "MARKET_SNAPSHOT"
-          ? `服务端快照刷新频率：${refreshSeconds ?? "--"} 秒`
+    <section className="summary-grid performance-grid multi-market-returns">
+      {unavailable ? <article className="summary-card featured"><small>我的收益</small><strong>--</strong>
+        <span>{returnsError ? "收益服务暂不可用" : "正在计算收益"}</span></article>
+        : returns.groups.length === 0 ? <article className="summary-card"><small>我的收益</small>
+          <strong>--</strong><span>添加持仓后开始计算</span></article>
+          : returns.groups.map((group) => {
+            const daily = display === "AMOUNT" ? group.dailyProfit : group.dailyReturnPercent;
+            const holding = display === "AMOUNT" ? group.holdingProfit : group.holdingReturnPercent;
+            return <article className="summary-card" key={group.market}>
+              <small>{marketLabel[group.market]} · {group.currency}</small>
+              <div><span>日收益</span><strong className={valueClass(daily)}>{display === "AMOUNT"
+                ? signedMoney(daily, group.currency) : daily == null ? "--" : percent(daily)}</strong></div>
+              <div><span>持有收益</span><strong className={valueClass(holding)}>{display === "AMOUNT"
+                ? signedMoney(holding, group.currency) : holding == null ? "--" : percent(holding)}</strong></div>
+              <span>{statusLabel[group.dailyStatus]}{group.unavailableDailyCount
+                ? ` · ${group.unavailableDailyCount} 项日收益不可用` : ""}</span>
+            </article>;
+          })}
+      <article className="summary-card"><small>行情刷新</small><strong className="status-live"><i />
+        {marketMode === "MARKET_SNAPSHOT" ? "服务端快照" : "客户端查询"}</strong>
+        <span>{marketMode === "MARKET_SNAPSHOT" ? `服务端快照刷新频率：${refreshSeconds ?? "--"} 秒`
           : `客户端查询频率：${singleRefreshSeconds} 秒`}</span></article>
     </section>
     <section className="home-callout">
@@ -88,6 +95,6 @@ export function HomePage({ data, performance, performanceLoading, performanceErr
         <p>持仓明细、数量和成本仅在“我的持仓”页面展示。</p></div>
       <button className="secondary-button page-action" onClick={onOpenPortfolio}>查看我的持仓</button>
     </section>
-    <footer>{performance?.referenceNotice ?? "收益基于手工持仓与行情计算，仅供参考，不构成投资建议"}</footer>
+    <footer>{returns?.calculationNotice ?? "收益基于手工持仓与行情计算，仅供参考，不构成投资建议"}</footer>
   </main>;
 }

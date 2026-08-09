@@ -32,12 +32,13 @@ class MarketDataConfigServiceTest {
                 30));
 
         assertThat(updated.getMode()).isEqualTo(MarketDataConfig.Mode.SINGLE_STOCK);
+        assertThat(updated.getSnapshotSource()).isEqualTo(MarketDataConfig.SnapshotSource.SINA);
         assertThat(updated.getSingleSource()).isEqualTo(MarketDataConfig.SingleSource.XUEQIU);
         verify(audits).save(any());
     }
 
     @Test
-    void rejectsUnsafeDualSourceFrequencyWithoutPersistingOrAuditing() {
+    void rejectsUnsafeSnapshotFrequencyWithoutPersistingOrAuditing() {
         var service = new MarketDataConfigService(repository, audits);
 
         assertThatThrownBy(() -> service.update(UUID.randomUUID(),

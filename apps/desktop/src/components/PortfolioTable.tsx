@@ -1,10 +1,11 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { memo } from "react";
 import { marketPhase, money, percent, quoteTime } from "../lib/format";
-import type { PortfolioItem } from "../types";
+import type { PortfolioItem, PositionReturn } from "../types";
 
-function PortfolioTableComponent({ items, compact = false, onDelete, onEdit }: {
+function PortfolioTableComponent({ items, itemReturns = new Map(), compact = false, onDelete, onEdit }: {
   items: PortfolioItem[]; compact?: boolean; onDelete?: (id: string) => void;
+  itemReturns?: Map<string, PositionReturn>;
   onEdit?: (item: PortfolioItem) => void;
 }) {
   if (!items.length) return <div className="empty-state">还没有自选。添加一只股票，行情会在这里呼吸。</div>;
@@ -12,37 +13,43 @@ function PortfolioTableComponent({ items, compact = false, onDelete, onEdit }: {
   if (!compact) {
     return <div className="quote-table portfolio-quote-list">
       {items.map((item) => {
-        const positive = (item.profit ?? 0) >= 0;
+        const returns = itemReturns.get(item.id);
+        const positive = (returns?.holdingProfit ?? 0) >= 0;
         const quote = item.quote;
         const code = item.instrumentId.split(":").at(-1) ?? item.instrumentId;
+        const currency = item.currency === "HKD" ? "HK$" : item.currency === "USD" ? "$" : "¥";
         return <article className={`portfolio-quote-row ${quote?.stale ? "stale" : ""}`} key={item.id}>
           <div className="portfolio-security-line quote-security">
             <strong>{item.displayName}</strong>
             <span className="portfolio-code">{code}</span>
-            <small>{quote ? `最后刷新 ${quoteTime(quote.sourceTimestamp)}` : "暂无行情时间"}</small>
+            <small>{item.market === "PUBLIC_FUND" && returns?.valueDate
+              ? `净值日期 ${returns.valueDate}`
+              : returns?.quoteAsOf ? `最后刷新 ${quoteTime(returns.quoteAsOf)}`
+                : quote ? `最后刷新 ${quoteTime(quote.sourceTimestamp)}` : "暂无行情时间"}</small>
           </div>
           <div className="portfolio-metrics">
             <span className="portfolio-metric quote-price">
-              <small>现价</small><strong>{quote ? money(quote.last) : "--"}</strong>
+              <small>{item.market === "PUBLIC_FUND" ? "单位净值" : "现价"}</small>
+              <strong>{returns?.currentPrice != null ? money(returns.currentPrice) : quote ? money(quote.last) : "--"}</strong>
               {quote ? <em className={quote.change >= 0 ? "up" : "down"}>
                 {quote.change >= 0 ? "+" : ""}{money(quote.change)} · {percent(quote.changePercent)}
               </em> : <em>行情暂不可用</em>}
             </span>
             <span className="portfolio-metric quote-position">
-              <small>持仓</small><strong>{money(item.quantity)}</strong><em>成本 {money(item.costPrice)}</em>
+              <small>{item.market === "PUBLIC_FUND" ? "份额" : "持仓"}</small><strong>{money(item.quantity)}</strong><em>成本 {currency} {money(item.costPrice)}</em>
             </span>
             <span className="portfolio-metric quote-market-value">
-              <small>市值</small><strong>{item.marketValue == null ? "--" : `¥ ${money(item.marketValue)}`}</strong>
+              <small>市值</small><strong>{item.marketValue == null ? "--" : `${currency} ${money(item.marketValue)}`}</strong>
               <em>{!quote ? "等待行情" : quote.stale ? "最后数据 · 已陈旧" : quote.demo
                 ? "演示估算" : quote.delayed ? "延迟估算" : "实时估算"}</em>
             </span>
             <span className="portfolio-metric quote-profit">
-              <small>浮动盈亏</small>
-              <strong className={item.profit == null ? "" : positive ? "up" : "down"}>
-                {item.profit == null ? "--" : `${positive ? "+" : ""}¥ ${money(item.profit)}`}
+              <small>日收益 / 持有收益</small>
+              <strong className={returns?.holdingProfit == null ? "" : positive ? "up" : "down"}>
+                {returns?.dailyProfit == null ? "--" : `${returns.dailyProfit >= 0 ? "+" : ""}${currency} ${money(returns.dailyProfit)}`}
               </strong>
-              <em className={item.returnPercent == null ? "" : positive ? "up" : "down"}>
-                {item.returnPercent == null ? "等待行情" : percent(item.returnPercent)}
+              <em className={returns?.holdingProfit == null ? "" : positive ? "up" : "down"}>
+                {returns?.holdingProfit == null ? "等待行情" : `${returns.holdingProfit >= 0 ? "+" : ""}${currency} ${money(returns.holdingProfit)} · ${percent(returns.holdingReturnPercent ?? 0)}`}
               </em>
             </span>
           </div>
@@ -69,6 +76,7 @@ function PortfolioTableComponent({ items, compact = false, onDelete, onEdit }: {
       {items.map((item) => {
         const positive = (item.profit ?? 0) >= 0;
         const quote = item.quote;
+        const currency = item.currency === "HKD" ? "HK$" : item.currency === "USD" ? "$" : "¥";
         return (
           <div className={`quote-row ${quote?.stale ? "stale" : ""}`} key={item.id}>
             <span className="security-cell quote-security"><strong>{item.displayName}</strong>
@@ -80,12 +88,12 @@ function PortfolioTableComponent({ items, compact = false, onDelete, onEdit }: {
               {quote ? <small className={quote.change >= 0 ? "up" : "down"}>
                 {quote.change >= 0 ? "+" : ""}{money(quote.change)} · {percent(quote.changePercent)}
               </small> : <small>行情暂不可用</small>}</span>
-            <span className="quote-position"><strong>{money(item.quantity)}</strong><small>成本 {money(item.costPrice)}</small></span>
-            <span className="quote-market-value"><strong>{item.marketValue == null ? "--" : `¥ ${money(item.marketValue)}`}</strong><small>
+            <span className="quote-position"><strong>{money(item.quantity)}</strong><small>成本 {currency} {money(item.costPrice)}</small></span>
+            <span className="quote-market-value"><strong>{item.marketValue == null ? "--" : `${currency} ${money(item.marketValue)}`}</strong><small>
               {!quote ? "等待行情" : quote.stale ? "最后数据 · 已陈旧" : quote.demo ? "演示估算" : quote.delayed ? "延迟估算" : "实时估算"}
             </small></span>
             <span className="quote-profit"><strong className={item.profit == null ? "" : positive ? "up" : "down"}>
-              {item.profit == null ? "--" : `${positive ? "+" : ""}¥ ${money(item.profit)}`}</strong>
+              {item.profit == null ? "--" : `${positive ? "+" : ""}${currency} ${money(item.profit)}`}</strong>
               <small className={item.returnPercent == null ? "" : positive ? "up" : "down"}>
                 {item.returnPercent == null ? "等待行情" : percent(item.returnPercent)}</small></span>
           </div>

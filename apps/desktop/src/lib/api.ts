@@ -1,11 +1,20 @@
 import type {
   AdminHolding, AdminUser, AdminUserOverview, AuthResponse, MarketDataConfig, MarketDataStatus,
-  Page, PerformanceSummary, PortfolioSummary, SearchResult, UserOperationAudit,
+  MarketIndexQuote, MarketStatus, Page, PerformanceSummary, PortfolioReturns, PortfolioSummary, SearchResult, UserOperationAudit,
 } from "../types";
+import type { Market } from "../types";
 import { useAuth } from "../store/auth";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 const IS_TICKER = new URLSearchParams(window.location.search).get("view") === "ticker";
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string,
+    readonly details: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true,
   timeoutMs = 12_000): Promise<T> {
@@ -58,7 +67,8 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true,
   }
   if (!response.ok) {
     const problem = await response.json().catch(() => ({ detail: "服务暂时不可用" }));
-    throw new Error(problem.detail ?? `请求失败 (${response.status})`);
+    throw new ApiError(problem.detail ?? `请求失败 (${response.status})`, response.status,
+      typeof problem.code === "string" ? problem.code : undefined, problem);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -79,23 +89,31 @@ export const api = {
   changePassword: (body: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
     request<void>("/api/v1/me/change-password", { method: "POST", body: JSON.stringify(body) }),
   performance: () => request<PerformanceSummary>("/api/v1/me/performance"),
+  portfolioReturns: () => request<PortfolioReturns>("/api/v1/me/returns"),
   portfolio: (mode?: MarketDataConfig["mode"], snapshotSource?: MarketDataConfig["snapshotSource"],
-    singleSource?: MarketDataConfig["singleSource"]) => {
+    singleSource?: MarketDataConfig["singleSource"], market?: Market) => {
     const query = new URLSearchParams();
     if (mode) query.set("mode", mode);
     if (snapshotSource) query.set("snapshotSource", snapshotSource);
     if (singleSource) query.set("singleSource", singleSource);
+    if (market) query.set("market", market);
     const suffix = query.size ? `?${query.toString()}` : "";
     return request<PortfolioSummary>(`/api/v1/portfolio/items${suffix}`);
   },
-  search: (query: string, signal?: AbortSignal) =>
-    request<SearchResult[]>(`/api/v1/instruments/search?query=${encodeURIComponent(query)}`,
+  search: (query: string, signal?: AbortSignal, market: Market = "A_SHARE") =>
+    request<SearchResult[]>(`/api/v1/instruments/search?market=${market}&query=${encodeURIComponent(query)}`,
       { signal }, true, 8_000),
   addItem: (body: {
-    instrumentId: string; displayName: string; quantity: number; costPrice: number | null; sortOrder: number;
+    instrumentId: string; displayName: string; market?: Market; openedOn?: string;
+    quantity: number; costPrice: number | null; sortOrder: number;
   }) => request("/api/v1/portfolio/items", { method: "POST", body: JSON.stringify(body) }),
+  accumulateItem: (id: string, body: { quantity: number; costPrice: number }) =>
+    request(`/api/v1/portfolio/items/${encodeURIComponent(id)}/accumulate`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
   updateItem: (id: string, body: {
-    instrumentId: string; displayName: string; quantity: number; costPrice: number | null; sortOrder: number;
+    instrumentId: string; displayName: string; market?: Market; openedOn?: string;
+    quantity: number; costPrice: number | null; sortOrder: number;
   }) => request(`/api/v1/portfolio/items/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteItem: (id: string) => request<void>(`/api/v1/portfolio/items/${id}`, { method: "DELETE" }),
   users: (query = "") =>
@@ -136,4 +154,7 @@ export const api = {
     const suffix = query.size ? `?${query.toString()}` : "";
     return request<MarketDataStatus>(`/api/v1/market-data/status${suffix}`);
   },
+  marketOverview: (source: MarketDataConfig["snapshotSource"]) =>
+    request<MarketIndexQuote[]>(`/api/v1/market-overview/a-share?source=${encodeURIComponent(source)}`),
+  marketStatuses: () => request<MarketStatus[]>("/api/v1/markets/status"),
 };

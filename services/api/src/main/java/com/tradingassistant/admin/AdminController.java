@@ -105,7 +105,8 @@ public class AdminController {
         List<PortfolioItem> owned = portfolios.findAllByUserIdOrderBySortOrderAscCreatedAtAsc(id);
         Set<String> available = availableQuotes(owned);
         return new HoldingsResponse(owned.stream().map(item -> new HoldingSummary(item.canonical(),
-                item.getDisplayName(), item.getExchange().name(), available.contains(item.canonical())))
+                item.getDisplayName(), item.getMarket().name(), item.getExchange().name(),
+                item.getCurrency().name(), available.contains(item.canonical())))
                 .toList());
     }
 
@@ -134,9 +135,13 @@ public class AdminController {
 
     private Set<String> availableQuotes(List<PortfolioItem> owned) {
         if (owned.isEmpty()) return Set.of();
+        List<InstrumentId> aShares = owned.stream().map(item ->
+                        item.getMarket() == com.tradingassistant.market.Market.A_SHARE
+                                ? InstrumentId.parse(item.canonical()) : null)
+                .filter(java.util.Objects::nonNull).toList();
+        if (aShares.isEmpty()) return Set.of();
         try {
-            return quotes.snapshots(owned.stream().map(item ->
-                            InstrumentId.parse(item.canonical())).toList()).stream()
+            return quotes.snapshots(aShares).stream()
                     .map(Quote::instrumentId).collect(Collectors.toSet());
         } catch (QuoteUnavailableException exception) {
             return Set.of();
@@ -161,15 +166,18 @@ public class AdminController {
         }
     }
     record UserOverview(UserSummary user, long holdingCount, PerformanceSummary performance) {}
-    record HoldingSummary(String instrumentId, String displayName, String exchange,
+    record HoldingSummary(String instrumentId, String displayName, String market, String exchange,
+                          String currency,
                           boolean quoteAvailable) {}
     record HoldingsResponse(List<HoldingSummary> content) {}
     record UserAuditSummary(UUID id, UserOperationAudit.Action action, String instrumentId,
-                            String instrumentName, UserOperationAudit.Result result,
+                            String instrumentName, com.tradingassistant.market.Market market,
+                            java.time.LocalDate openedOn, UserOperationAudit.Result result,
                             Instant createdAt) {
         static UserAuditSummary from(UserOperationAudit audit) {
             return new UserAuditSummary(audit.getId(), audit.getAction(), audit.getInstrumentId(),
-                    audit.getInstrumentName(), audit.getResult(), audit.getCreatedAt());
+                    audit.getInstrumentName(), audit.getMarket(), audit.getOpenedOn(),
+                    audit.getResult(), audit.getCreatedAt());
         }
     }
 }

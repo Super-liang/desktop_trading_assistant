@@ -1,5 +1,6 @@
 package com.tradingassistant.catalog;
 
+import com.tradingassistant.market.Market;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -15,8 +16,9 @@ public class SecurityCatalogController {
 
     @GetMapping("/search")
     public List<SecurityCatalogService.View> search(
+            @RequestParam(defaultValue = "A_SHARE") Market market,
             @RequestParam(defaultValue = "") @Size(max = 64) String query,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit) {
-        return catalog.search(query, limit);
+        return catalog.search(market, query, limit);
     }
 }

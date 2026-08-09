@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, BriefcaseBusiness, Database, EyeOff, Home, KeyRound, LogOut, Settings, Shield,
-  Sparkles, UserX,
+  Activity, BriefcaseBusiness, Database, EyeOff, Home, Settings, Shield,
+  Sparkles, UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
@@ -10,16 +10,17 @@ import { portfolioRefetchInterval, useMarketPreferences } from "../lib/marketPre
 import { useAuth } from "../store/auth";
 import { AddPositionDialog } from "./AddPositionDialog";
 import { AdminPanel } from "./AdminPanel";
+import { AccountPage } from "./AccountPage";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { EditPositionDialog } from "./EditPositionDialog";
 import { HomePage } from "./HomePage";
 import { MarketDataSettings } from "./MarketDataSettings";
 import { PortfolioPage } from "./PortfolioPage";
-import type { PortfolioItem } from "../types";
+import type { Market, PortfolioItem } from "../types";
 import { isTauriRuntime, useWindowVisibility } from "../lib/windowVisibility";
 import { PORTFOLIO_SYNC_EVENT, TICKER_DATA_READY_EVENT } from "../lib/desktopEvents";
 
-type ActiveView = "HOME" | "PORTFOLIO" | "MARKET_DATA" | "ADMIN";
+type ActiveView = "HOME" | "PORTFOLIO" | "MARKET_DATA" | "ADMIN" | "ACCOUNT";
 
 async function toggleTicker() {
   try {
@@ -41,6 +42,7 @@ export function Dashboard() {
   const [activeView, setActiveView] = useState<ActiveView>("HOME");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<PortfolioItem | null>(null);
+  const [portfolioMarket, setPortfolioMarket] = useState<Market>("A_SHARE");
   const [changingPassword, setChangingPassword] = useState(false);
   const visible = useWindowVisibility("main");
   const marketConfig = useQuery({
@@ -49,7 +51,7 @@ export function Dashboard() {
   });
   const preferences = useMarketPreferences(
     marketConfig.data?.mode ?? "MARKET_SNAPSHOT",
-    marketConfig.data?.snapshotSource ?? "EASTMONEY",
+    marketConfig.data?.snapshotSource ?? "SINA",
     marketConfig.data?.singleSource ?? "EASTMONEY",
   );
   const marketMode = preferences.mode;
@@ -61,12 +63,16 @@ export function Dashboard() {
     ),
     enabled: visible && marketConfig.isSuccess,
   });
-  const performance = useQuery({
-    queryKey: ["me-performance"], queryFn: api.performance,
+  const returnsQuery = useQuery({
+    queryKey: ["me-returns"], queryFn: api.portfolioReturns,
     refetchInterval: portfolioRefetchInterval(
       marketMode, preferences.singleRefreshSeconds, marketConfig.data?.refreshSeconds ?? 30,
     ),
     enabled: visible,
+  });
+  const marketStatuses = useQuery({
+    queryKey: ["market-statuses"], queryFn: api.marketStatuses,
+    refetchInterval: 60_000, enabled: visible,
   });
 
   useEffect(() => {
@@ -117,7 +123,7 @@ export function Dashboard() {
     try {
       await api.deleteItem(id);
       await portfolio.refetch();
-      await performance.refetch();
+      await returnsQuery.refetch();
     } catch (reason) {
       window.alert(reason instanceof Error ? reason.message : "删除失败");
     }
@@ -125,19 +131,29 @@ export function Dashboard() {
 
   const data = portfolio.data;
   const quoteSource = summarizeQuoteSource(data?.items ?? [], portfolio.isError);
-  const navigate = (view: ActiveView) => setActiveView(view);
+  const navigate = (view: ActiveView) => {
+    setActiveView(view);
+  };
   const mainContent = activeView === "PORTFOLIO"
-    ? <PortfolioPage data={data} loading={portfolio.isLoading}
+    ? <PortfolioPage data={data} returns={returnsQuery.data} loading={portfolio.isLoading}
       error={portfolio.error instanceof Error ? portfolio.error : null}
+      market={portfolioMarket} onMarketChange={setPortfolioMarket}
+      marketStatus={marketStatuses.data?.find((item) => item.market === portfolioMarket)?.phase}
       onAdd={() => setAdding(true)} onEdit={setEditing} onDelete={(id) => void remove(id)} />
     : activeView === "MARKET_DATA"
       ? <MarketDataSettings isAdmin={session.role === "ADMIN"} onBack={() => navigate("HOME")} />
       : activeView === "ADMIN"
         ? <AdminPanel onBack={() => navigate("HOME")} />
-        : <HomePage data={data} performance={performance.data}
-          performanceLoading={performance.isLoading} performanceError={performance.isError}
+        : activeView === "ACCOUNT"
+          ? <AccountPage isAdmin={session.role === "ADMIN"}
+            onChangePassword={() => setChangingPassword(true)} onLogout={logout}
+            onLogoutAll={() => void logoutAll()} onDeleteAccount={() => void deleteAccount()}
+            onOpenAdmin={() => navigate("ADMIN")} />
+        : <HomePage data={data} returns={returnsQuery.data}
+          returnsLoading={returnsQuery.isLoading} returnsError={returnsQuery.isError}
           quoteBadge={quoteSource.badge} quoteNotice={quoteSource.notice}
-          marketMode={marketMode} singleSource={preferences.singleSource} visible={visible}
+          marketMode={marketMode} snapshotSource={preferences.snapshotSource}
+          singleSource={preferences.singleSource} visible={visible}
           refreshSeconds={marketConfig.data?.refreshSeconds}
           singleRefreshSeconds={preferences.singleRefreshSeconds}
           onAdd={() => setAdding(true)} onOpenPortfolio={() => navigate("PORTFOLIO")} />;
@@ -155,16 +171,14 @@ export function Dashboard() {
           <Database size={18} /> 实时行情源</button>
         {session.role === "ADMIN" && <button className={activeView === "ADMIN" ? "active" : ""}
           onClick={() => navigate("ADMIN")}><Shield size={18} /> 用户管理</button>}
-        <button onClick={() => setChangingPassword(true)}><KeyRound size={18} /> 修改密码</button>
+        <button className={activeView === "ACCOUNT" ? "active" : ""}
+          onClick={() => navigate("ACCOUNT")}><UserRound size={18} /> 我的</button>
         <button disabled><Settings size={18} /> 个性设置 <span className="phase">二期</span></button>
         <button disabled><Sparkles size={18} /> AI 分析 <span className="phase">三期</span></button>
       </nav>
       <div className="sidebar-bottom">
         <div className="shortcut-card"><small>老板键</small><strong>⌘ / Ctrl + Shift + H</strong>
           <span>全局隐藏全部行情窗口</span></div>
-        <button onClick={logout}><LogOut size={17} /> 退出登录</button>
-        <button onClick={logoutAll}><Shield size={17} /> 退出全部设备</button>
-        <button className="danger-text" onClick={deleteAccount}><UserX size={17} /> 注销账号</button>
       </div>
     </aside>
     <nav className="mobile-nav" aria-label="移动端导航">
@@ -174,22 +188,21 @@ export function Dashboard() {
         <BriefcaseBusiness size={19} /><span>我的持仓</span></button>
       <button className={activeView === "MARKET_DATA" ? "active" : ""} onClick={() => navigate("MARKET_DATA")}>
         <Database size={19} /><span>实时行情源</span></button>
-      <button onClick={() => setChangingPassword(true)}><KeyRound size={19} /><span>修改密码</span></button>
-      {session.role === "ADMIN" && <button className={activeView === "ADMIN" ? "active" : ""}
-        onClick={() => navigate("ADMIN")}><Shield size={19} /><span>用户管理</span></button>}
-      <button onClick={logout}><LogOut size={19} /><span>退出登录</span></button>
+      <button className={activeView === "ACCOUNT" ? "active" : ""}
+        onClick={() => navigate("ACCOUNT")}><UserRound size={19} /><span>我的</span></button>
     </nav>
     <div className="view-host">{mainContent}</div>
-    {adding && <AddPositionDialog onClose={() => setAdding(false)} onAdded={() => {
+    {adding && <AddPositionDialog onClose={() => setAdding(false)} onAdded={(market) => {
       setAdding(false);
+      setPortfolioMarket(market);
       setActiveView("PORTFOLIO");
       void portfolio.refetch();
-      void performance.refetch();
+      void returnsQuery.refetch();
     }} />}
     {editing && <EditPositionDialog item={editing} onClose={() => setEditing(null)} onSaved={() => {
       setEditing(null);
       void portfolio.refetch();
-      void performance.refetch();
+      void returnsQuery.refetch();
     }} />}
     {changingPassword && <ChangePasswordDialog onClose={() => setChangingPassword(false)} />}
   </div>;

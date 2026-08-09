@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, timezone
 from time import monotonic, sleep
 
 import pandas as pd
@@ -6,12 +6,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from akshare_gateway import app as app_module
-from akshare_gateway.app import Settings, create_app, load_akshare_frame, load_market_frame
+from akshare_gateway.app import (
+    Settings, create_app, load_akshare_frame, load_instrument_frame, load_market_frame,
+)
+from akshare_gateway.contracts import CatalogMarket
 from akshare_gateway.sources import MarketSource, SingleSource
 from akshare_gateway import http_timeout
 from akshare_gateway.isolation import run_isolated
 from akshare_gateway.single_quote_cache import RedisSingleQuoteCache
 from test_cache import FakeRedis
+from akshare_gateway.calendar_provider import MarketSession
 
 
 def slow_isolated_worker(sender, *args) -> None:
@@ -39,16 +43,54 @@ def client_for(
     )
 
 
-def test_akshare_loader_falls_back_to_sina(monkeypatch, market_frame: pd.DataFrame) -> None:
+def test_legacy_a_share_loader_uses_only_sina(monkeypatch, market_frame: pd.DataFrame) -> None:
     import akshare as ak
-
-    def unavailable():
-        raise ConnectionError("eastmoney unavailable")
-
-    monkeypatch.setattr(ak, "stock_zh_a_spot_em", unavailable)
     monkeypatch.setattr(ak, "stock_zh_a_spot", lambda: market_frame)
 
     assert load_akshare_frame() is market_frame
+
+
+def test_hk_catalog_loader_falls_back_to_sina(monkeypatch) -> None:
+    import akshare as ak
+
+    monkeypatch.setattr(
+        ak, "stock_hk_spot_em",
+        lambda: (_ for _ in ()).throw(ConnectionError("eastmoney unavailable")),
+    )
+    monkeypatch.setattr(
+        ak, "stock_hk_spot",
+        lambda: pd.DataFrame([{"代码": "00700", "中文名称": "腾讯控股"}]),
+    )
+
+    result = load_instrument_frame(CatalogMarket.HK_STOCK)
+
+    assert result.to_dict(orient="records") == [{"代码": "00700", "名称": "腾讯控股"}]
+
+
+def test_us_catalog_loader_falls_back_to_sina_and_preserves_exchange(monkeypatch) -> None:
+    import akshare as ak
+
+    monkeypatch.setattr(
+        ak, "stock_us_spot_em",
+        lambda: (_ for _ in ()).throw(ConnectionError("eastmoney unavailable")),
+    )
+    monkeypatch.setattr(
+        ak, "stock_us_spot",
+        lambda: pd.DataFrame([
+            {"symbol": "AAPL", "cname": "苹果公司", "name": "Apple Inc", "market": "NASDAQ"},
+            {"symbol": "BRK.B", "cname": "", "name": "Berkshire Hathaway", "market": "NYSE"},
+            {"symbol": "SPY", "cname": "标普 ETF", "name": "SPDR S&P 500 ETF", "market": "AMEX"},
+            {"symbol": "OTCM", "cname": "场外证券", "name": "OTC Markets", "market": "OTC"},
+        ]),
+    )
+
+    result = load_instrument_frame(CatalogMarket.US_STOCK)
+
+    assert result.to_dict(orient="records") == [
+        {"代码": "105.AAPL", "名称": "苹果公司"},
+        {"代码": "106.BRK.B", "名称": "Berkshire Hathaway"},
+        {"代码": "107.SPY", "名称": "标普 ETF"},
+    ]
 
 
 def test_health_is_public_and_does_not_expose_api_key(
@@ -76,6 +118,103 @@ def test_v1_endpoints_require_matching_api_key(
     )
     assert response.status_code == 401
     assert "test-shared-key" not in response.text
+
+
+def test_calendar_endpoint_returns_normalized_sessions(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    class FakeCalendarProvider:
+        def sessions(self, start: date, end: date):
+            assert start == end == date(2026, 7, 29)
+            return [MarketSession(
+                market="A_SHARE",
+                trading_date=start,
+                timezone="Asia/Shanghai",
+                open_at=datetime(2026, 7, 29, 1, 30, tzinfo=timezone.utc),
+                break_start_at=datetime(2026, 7, 29, 3, 30, tzinfo=timezone.utc),
+                break_end_at=datetime(2026, 7, 29, 5, 0, tzinfo=timezone.utc),
+                close_at=datetime(2026, 7, 29, 7, 0, tzinfo=timezone.utc),
+                early_close=False,
+            )]
+
+    client = client_for(market_frame, fetched_at, calendar_provider=FakeCalendarProvider())
+    response = client.get(
+        "/v1/calendars/sessions",
+        params={"start": "2026-07-29", "end": "2026-07-29"},
+        headers={"X-API-Key": "test-shared-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()[0]["market"] == "A_SHARE"
+    assert response.json()[0]["break_start_at"] == "2026-07-29T03:30:00+00:00"
+
+
+def test_a_share_calendar_cross_check_exposes_mismatch_and_health(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    client = client_for(
+        market_frame, fetched_at,
+        a_share_calendar_loader=lambda: pd.DataFrame({
+            "trade_date": [date(2024, 11, 28)]
+        }),
+    )
+    headers = {"X-API-Key": "test-shared-key"}
+
+    response = client.get(
+        "/v1/calendars/a-share-check",
+        params={"start": "2024-11-28", "end": "2024-11-29"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "MISMATCH"
+    assert response.json()["onlyExchangeCalendars"] == ["2024-11-29"]
+    statuses = client.get("/v1/sources/status", headers=headers).json()
+    assert next(item for item in statuses
+                if item["source"] == "CALENDAR_A_SHARE_CHECK")["status"] == "UP"
+
+
+def test_a_share_calendar_check_fails_closed_on_schema_drift(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    client = client_for(
+        market_frame, fetched_at,
+        a_share_calendar_loader=lambda: pd.DataFrame({"unexpected": []}),
+    )
+
+    response = client.get(
+        "/v1/calendars/a-share-check",
+        params={"start": "2024-11-28", "end": "2024-11-29"},
+        headers={"X-API-Key": "test-shared-key"},
+    )
+
+    assert response.status_code == 503
+
+
+def test_index_endpoint_keeps_product_order_and_explicit_missing_cards(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    index_frame = pd.DataFrame([
+        {"代码": "000001", "名称": "上证指数", "最新价": 3100, "涨跌额": 1,
+         "涨跌幅": 0.03, "今开": 3098, "昨收": 3099},
+        {"代码": "399001", "名称": "深证成指", "最新价": 9900, "涨跌额": -2,
+         "涨跌幅": -0.02, "今开": 9910, "昨收": 9902},
+        {"代码": "399006", "名称": "创业板指", "最新价": 2000, "涨跌额": 3,
+         "涨跌幅": 0.15, "今开": 1995, "昨收": 1997},
+    ])
+    client = client_for(
+        market_frame, fetched_at,
+        index_frames_loader=lambda source: [index_frame],
+    )
+
+    response = client.get("/v1/market/indices", headers={"X-API-Key": "test-shared-key"})
+
+    assert response.status_code == 200
+    cards = response.json()
+    assert [card["name"] for card in cards[:3]] == ["上证指数", "深证成指", "创业板指"]
+    assert len(cards) == 7
+    assert cards[3]["name"] == "北证50"
+    assert cards[3]["available"] is False
 
 
 def test_searches_by_code_or_name(
@@ -143,6 +282,28 @@ def test_explicit_market_source_does_not_fallback(monkeypatch, market_frame: pd.
 
     assert load_market_frame(MarketSource.SINA) is market_frame
     assert calls == ["sina"]
+    with pytest.raises(ValueError, match="不支持"):
+        load_market_frame(MarketSource.EASTMONEY)
+    assert calls == ["sina"]
+
+
+def test_hk_sina_snapshot_retries_once_without_eastmoney(
+    monkeypatch, market_frame: pd.DataFrame
+) -> None:
+    import akshare as ak
+
+    calls = []
+    def transient_failure():
+        calls.append("sina")
+        if len(calls) == 1:
+            raise ConnectionError("transient")
+        return market_frame
+    monkeypatch.setattr(ak, "stock_hk_spot", transient_failure)
+    monkeypatch.setattr(ak, "stock_hk_spot_em",
+                        lambda: (_ for _ in ()).throw(AssertionError("不应调用东财")))
+
+    assert load_market_frame(MarketSource.SINA, CatalogMarket.HK_STOCK) is market_frame
+    assert calls == ["sina", "sina"]
 
 
 def test_eastmoney_single_rejects_bse_before_calling_akshare(monkeypatch) -> None:
@@ -168,13 +329,166 @@ def test_market_snapshot_uses_requested_source(
 
     response = client.get(
         "/v1/market/snapshot",
-        params={"source": "EASTMONEY"},
+        params={"source": "SINA"},
         headers={"X-API-Key": "test-shared-key"},
     )
 
     assert response.status_code == 200
     assert len(response.json()) == 3
-    assert response.json()[0]["source"] == "AKSHARE_EASTMONEY_SNAPSHOT"
+    assert response.json()[0]["source"] == "AKSHARE_SINA_SNAPSHOT"
+
+
+def test_hk_sina_market_snapshot_uses_explicit_market_adapter(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    frames = {
+        (CatalogMarket.HK_STOCK, MarketSource.SINA): pd.DataFrame([{
+            "代码": "700", "中文名称": "腾讯控股", "最新价": 500, "涨跌额": 5,
+            "涨跌幅": 1, "今开": 496, "昨收": 495, "最高": 501,
+            "最低": 494, "成交量": 1000,
+        }]),
+    }
+    client = client_for(
+        market_frame, fetched_at,
+        market_frame_loader=lambda source, market: frames[(market, source)],
+    )
+    headers = {"X-API-Key": "test-shared-key"}
+
+    hk = client.get("/v1/market/snapshot", params={
+        "market": "HK_STOCK", "source": "SINA"}, headers=headers)
+    assert hk.status_code == 200
+    assert hk.json()[0]["instrumentId"] == "HKEX:00700"
+
+
+def test_us_market_snapshot_is_rejected_without_upstream_call(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    calls = []
+    client = client_for(
+        market_frame, fetched_at,
+        market_frame_loader=lambda source, market: calls.append((source, market)),
+    )
+
+    response = client.get("/v1/market/snapshot", params={
+        "market": "US_STOCK", "source": "SINA"},
+        headers={"X-API-Key": "test-shared-key"})
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_market_snapshot_rejects_removed_eastmoney_without_upstream_call(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    calls = []
+    client = client_for(
+        market_frame, fetched_at,
+        market_frame_loader=lambda source, market: calls.append((source, market)),
+    )
+
+    response = client.get("/v1/market/snapshot", params={
+        "market": "HK_STOCK", "source": "EASTMONEY"},
+        headers={"X-API-Key": "test-shared-key"})
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_source_capabilities_are_market_scoped_and_match_implemented_routes(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    client = client_for(market_frame, fetched_at)
+
+    response = client.get(
+        "/v1/sources/capabilities",
+        headers={"X-API-Key": "test-shared-key"},
+    )
+
+    assert response.status_code == 200
+    capabilities = response.json()
+    assert {item["sourceId"] for item in capabilities if item["capability"] == "SNAPSHOT"} == {
+        "A_SHARE:SNAPSHOT:SINA", "HK_STOCK:SNAPSHOT:SINA",
+    }
+    assert any(item["sourceId"] == "US_STOCK:POSITION:SINA"
+               for item in capabilities)
+    assert any(item["sourceId"] == "PUBLIC_FUND:UNIT_NAV:EASTMONEY"
+               for item in capabilities)
+
+
+def test_us_position_quotes_validate_then_call_injected_sina_loader(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    calls = []
+    quote = {
+        "instrumentId": "NASDAQ:AAPL", "name": "Apple", "last": 200,
+        "previousClose": 198, "open": 199, "high": 201, "low": 197,
+        "change": 2, "changePercent": 1.01, "volume": 100,
+        "marketPhase": "UNKNOWN", "source": "AKSHARE_SINA_POSITION",
+        "sourceTimestamp": fetched_at, "receivedAt": fetched_at,
+        "delayed": True, "stale": False, "demo": False,
+    }
+    client = client_for(
+        market_frame, fetched_at,
+        us_position_quote_loader=lambda symbols: calls.append(symbols) or [quote],
+    )
+    headers = {"X-API-Key": "test-shared-key"}
+
+    success = client.post("/v1/quotes/us-positions", headers=headers, json={
+        "symbols": ["nasdaq:aapl", "NASDAQ:AAPL"]})
+    invalid = client.post("/v1/quotes/us-positions", headers=headers, json={
+        "symbols": ["NASDAQ:AAPL;DROP"]})
+
+    assert success.status_code == 200
+    assert success.json()[0]["source"] == "AKSHARE_SINA_POSITION"
+    assert invalid.status_code == 422
+    assert calls == [["NASDAQ:AAPL"]]
+
+
+def test_fund_unit_nav_uses_current_data_and_history_for_missing_holding(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    history_calls = []
+    client = client_for(
+        market_frame, fetched_at,
+        fund_nav_loader=lambda: pd.DataFrame([{
+            "基金代码": "000001", "基金简称": "当前基金",
+            "2026-07-29-单位净值": "1.25", "2026-07-28-单位净值": "1.20",
+        }]),
+        fund_history_loader=lambda code: history_calls.append(code) or pd.DataFrame([
+            {"净值日期": "2026-07-29", "单位净值": "2.1"},
+            {"净值日期": "2026-07-28", "单位净值": "2.0"},
+        ]),
+    )
+
+    response = client.post(
+        "/v1/funds/unit-nav",
+        json={"symbols": ["CN_FUND:000001", "CN_FUND:000002"]},
+        headers={"X-API-Key": "test-shared-key"},
+    )
+
+    assert response.status_code == 200
+    assert [item["instrumentId"] for item in response.json()] == [
+        "CN_FUND:000001", "CN_FUND:000002"]
+    assert history_calls == ["000002"]
+    assert response.json()[1]["previousUnitNav"] == 2.0
+
+
+def test_all_fund_unit_nav_returns_each_fund_once(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    client = client_for(
+        market_frame, fetched_at,
+        fund_nav_loader=lambda: pd.DataFrame([{
+            "基金代码": "000001", "基金简称": "当前基金",
+            "2026-07-29-单位净值": "1.25", "2026-07-28-单位净值": "1.20",
+        }]),
+    )
+
+    response = client.get(
+        "/v1/funds/unit-nav", headers={"X-API-Key": "test-shared-key"})
+
+    assert response.status_code == 200
+    assert [item["instrumentId"] for item in response.json()] == ["CN_FUND:000001"]
 
 
 def test_instrument_search_uses_directory_without_loading_market_snapshot(
@@ -227,17 +541,90 @@ def test_instrument_catalog_returns_normalized_full_directory(
             "instrumentId": "SZSE:000001",
             "code": "000001",
             "name": "平安银行",
+            "market": "A_SHARE",
             "exchange": "SZSE",
+            "currency": "CNY",
             "assetType": "STOCK",
+            "providerSymbol": "000001",
         },
         {
             "instrumentId": "SSE:600519",
             "code": "600519",
             "name": "贵州茅台",
+            "market": "A_SHARE",
             "exchange": "SSE",
+            "currency": "CNY",
             "assetType": "STOCK",
+            "providerSymbol": "600519",
         },
     ]
+
+
+def test_catalog_isolated_by_explicit_market(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    frames = {
+        CatalogMarket.A_SHARE: pd.DataFrame([{"code": "600519", "name": "贵州茅台"}]),
+        CatalogMarket.HK_STOCK: pd.DataFrame([{"代码": "700", "名称": "腾讯控股"}]),
+        CatalogMarket.US_STOCK: pd.DataFrame([{"代码": "105.AAPL", "名称": "Apple"}]),
+        CatalogMarket.PUBLIC_FUND: pd.DataFrame([
+            {"基金代码": "000001", "基金简称": "开放基金", "基金类型": "混合型"}
+        ]),
+    }
+    client = client_for(
+        market_frame, fetched_at,
+        instrument_frame_loader=lambda market: frames[market],
+    )
+    headers = {"X-API-Key": "test-shared-key"}
+
+    hk = client.get("/v1/instruments/catalog", params={"market": "HK_STOCK"}, headers=headers)
+    us_search = client.get(
+        "/v1/instruments/search",
+        params={"market": "US_STOCK", "query": "AAPL"},
+        headers=headers,
+    )
+
+    assert hk.status_code == 200
+    assert hk.json()[0]["instrumentId"] == "HKEX:00700"
+    assert hk.json()[0]["currency"] == "HKD"
+    assert us_search.status_code == 200
+    assert us_search.json()[0]["instrumentId"] == "NASDAQ:AAPL"
+    assert all(item["market"] == "US_STOCK" for item in us_search.json())
+
+
+def test_missing_market_keeps_legacy_a_share_behavior(
+    market_frame: pd.DataFrame, fetched_at: datetime
+) -> None:
+    client = client_for(
+        market_frame, fetched_at,
+        instrument_frame_loader=lambda market: pd.DataFrame([
+            {"code": "600519", "name": "贵州茅台"}
+        ]) if market == CatalogMarket.A_SHARE else pd.DataFrame(),
+    )
+
+    response = client.get(
+        "/v1/instruments/search", params={"query": "600519"},
+        headers={"X-API-Key": "test-shared-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()[0]["market"] == "A_SHARE"
+
+
+def test_public_fund_loader_intersects_open_nav_codes(monkeypatch) -> None:
+    import akshare as ak
+
+    monkeypatch.setattr(ak, "fund_name_em", lambda: pd.DataFrame([
+        {"基金代码": "000001", "基金简称": "开放基金", "基金类型": "混合型"},
+        {"基金代码": "999999", "基金简称": "封闭基金", "基金类型": "封闭式"},
+    ]))
+    monkeypatch.setattr(ak, "fund_open_fund_daily_em", lambda: pd.DataFrame([
+        {"基金代码": "000001", "2026-07-28-单位净值": "1.25"},
+    ]))
+
+    result = load_instrument_frame(CatalogMarket.PUBLIC_FUND)
+
+    assert result["基金代码"].tolist() == ["000001"]
 
 
 def test_single_quotes_are_normalized_and_cached(

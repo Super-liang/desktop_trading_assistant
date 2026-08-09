@@ -45,7 +45,7 @@ class PerformanceSettlementSchedulerTest {
         when(daily.findById(any())).thenReturn(Optional.empty(), Optional.of(mock(UserPerformanceDaily.class)));
         when(quotes.snapshots(anyList(), argThat(options ->
                 options.mode() == MarketDataConfig.Mode.MARKET_SNAPSHOT
-                        && options.snapshotSource() == MarketDataConfig.SnapshotSource.EASTMONEY)))
+                        && options.snapshotSource() == MarketDataConfig.SnapshotSource.SINA)))
                 .thenReturn(List.of());
         var scheduler = scheduler();
 

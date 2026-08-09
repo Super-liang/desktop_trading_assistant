@@ -3,6 +3,8 @@ package com.tradingassistant.audit;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
+import java.time.LocalDate;
+import com.tradingassistant.market.Market;
 
 @Entity
 @Table(name = "user_operation_audits")
@@ -17,6 +19,8 @@ public class UserOperationAudit {
     @Column(name = "portfolio_item_id") private UUID portfolioItemId;
     @Column(name = "instrument_id", length = 24) private String instrumentId;
     @Column(name = "instrument_name", length = 80) private String instrumentName;
+    @Enumerated(EnumType.STRING) @Column(length = 20) private Market market;
+    @Column(name = "opened_on") private LocalDate openedOn;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private Result result;
     @Column(name = "request_id", nullable = false) private UUID requestId;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
@@ -24,6 +28,12 @@ public class UserOperationAudit {
     protected UserOperationAudit() {}
     public UserOperationAudit(UUID userId, Action action, UUID portfolioItemId,
             String instrumentId, String instrumentName, Result result) {
+        this(userId, action, portfolioItemId, instrumentId, instrumentName, null, null, result);
+    }
+
+    public UserOperationAudit(UUID userId, Action action, UUID portfolioItemId,
+            String instrumentId, String instrumentName, Market market, LocalDate openedOn,
+            Result result) {
         this.id = UUID.randomUUID();
         this.userId = userId;
         this.actorUserId = userId;
@@ -31,6 +41,8 @@ public class UserOperationAudit {
         this.portfolioItemId = portfolioItemId;
         this.instrumentId = instrumentId;
         this.instrumentName = instrumentName;
+        this.market = market;
+        this.openedOn = openedOn;
         this.result = result;
         this.requestId = UUID.randomUUID();
         this.createdAt = Instant.now();
@@ -42,6 +54,8 @@ public class UserOperationAudit {
     public UUID getPortfolioItemId() { return portfolioItemId; }
     public String getInstrumentId() { return instrumentId; }
     public String getInstrumentName() { return instrumentName; }
+    public Market getMarket() { return market; }
+    public LocalDate getOpenedOn() { return openedOn; }
     public Result getResult() { return result; }
     public UUID getRequestId() { return requestId; }
     public Instant getCreatedAt() { return createdAt; }

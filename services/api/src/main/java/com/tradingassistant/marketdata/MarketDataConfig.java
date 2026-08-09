@@ -37,7 +37,7 @@ public class MarketDataConfig {
         config.id = 1;
         config.provider = Provider.AKSHARE;
         config.mode = Mode.MARKET_SNAPSHOT;
-        config.snapshotSource = SnapshotSource.EASTMONEY;
+        config.snapshotSource = SnapshotSource.SINA;
         config.singleSource = SingleSource.EASTMONEY;
         config.refreshSeconds = 30;
         config.updatedAt = Instant.now();
@@ -48,7 +48,8 @@ public class MarketDataConfig {
             SingleSource singleSource, int refreshSeconds) {
         this.provider = provider;
         this.mode = mode;
-        this.snapshotSource = snapshotSource;
+        // 全市场快照固定使用新浪；保留请求参数仅用于兼容旧客户端契约。
+        this.snapshotSource = SnapshotSource.SINA;
         this.singleSource = singleSource;
         this.refreshSeconds = refreshSeconds;
         this.updatedAt = Instant.now();
@@ -61,4 +62,11 @@ public class MarketDataConfig {
     public SingleSource getSingleSource() { return singleSource; }
     public int getRefreshSeconds() { return refreshSeconds; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    public boolean normalizeSnapshotSource() {
+        if (snapshotSource == SnapshotSource.SINA) return false;
+        snapshotSource = SnapshotSource.SINA;
+        updatedAt = Instant.now();
+        return true;
+    }
 }

@@ -15,10 +15,10 @@ import {
 describe("marketPreferences", () => {
   beforeEach(() => window.localStorage.clear());
 
-  it("首次使用默认服务端来源和 10 秒单股频率", () => {
+  it("首次使用固定新浪快照和 10 秒单股频率", () => {
     expect(readMarketPreferences("MARKET_SNAPSHOT", "EASTMONEY", "XUEQIU")).toEqual({
       mode: "MARKET_SNAPSHOT",
-      snapshotSource: "EASTMONEY",
+      snapshotSource: "SINA",
       singleSource: "XUEQIU",
       singleRefreshSeconds: 10,
     });
@@ -35,8 +35,16 @@ describe("marketPreferences", () => {
     window.localStorage.setItem(SINGLE_SOURCE_STORAGE_KEY, "UNKNOWN");
     window.localStorage.setItem(SINGLE_REFRESH_STORAGE_KEY, "3");
     expect(readMarketPreferences("MARKET_SNAPSHOT", "EASTMONEY", "EASTMONEY")).toEqual({
-      mode: "MARKET_SNAPSHOT", snapshotSource: "EASTMONEY", singleSource: "EASTMONEY", singleRefreshSeconds: 10,
+      mode: "MARKET_SNAPSHOT", snapshotSource: "SINA", singleSource: "EASTMONEY", singleRefreshSeconds: 10,
     });
+  });
+
+  it("将历史东方财富全市场偏好迁移并持久化为新浪", () => {
+    window.localStorage.setItem(SNAPSHOT_SOURCE_STORAGE_KEY, "EASTMONEY");
+
+    expect(readMarketPreferences("MARKET_SNAPSHOT", "EASTMONEY", "EASTMONEY").snapshotSource)
+      .toBe("SINA");
+    expect(window.localStorage.getItem(SNAPSHOT_SOURCE_STORAGE_KEY)).toBe("SINA");
   });
 
   it("仅单股模式采用用户轮询频率", () => {

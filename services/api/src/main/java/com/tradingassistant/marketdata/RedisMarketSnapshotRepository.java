@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradingassistant.quote.InstrumentId;
 import com.tradingassistant.quote.Quote;
+import com.tradingassistant.market.Market;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -19,7 +20,8 @@ import org.slf4j.LoggerFactory;
 @Repository
 public class RedisMarketSnapshotRepository {
     private static final Logger log = LoggerFactory.getLogger(RedisMarketSnapshotRepository.class);
-    private static final String PREFIX = "trading:quotes:akshare:snapshot:";
+    private static final String PREFIX = "trading:quotes:akshare:";
+    private static final String LEGACY_PREFIX = "trading:quotes:akshare:snapshot:";
     private static final String METADATA_FIELD = "__metadata__";
     private static final DefaultRedisScript<Long> RELEASE_LOCK = new DefaultRedisScript<>(
             "if redis.call('get', KEYS[1]) == ARGV[1] then "
@@ -41,6 +43,11 @@ public class RedisMarketSnapshotRepository {
                     + "redis.call('hset', KEYS[1], '" + METADATA_FIELD + "', ARGV[1]); end; "
                     + "redis.call('persist', KEYS[1]); redis.call('del', KEYS[2]); return 1;",
             Long.class);
+    private static final DefaultRedisScript<Long> COPY_LEGACY_MARKET_KEY = new DefaultRedisScript<>(
+            "if redis.call('exists', KEYS[2]) == 1 or redis.call('exists', KEYS[1]) == 0 then return 0; end; "
+                    + "local old = redis.call('hgetall', KEYS[1]); "
+                    + "for i = 1, #old, 2 do redis.call('hset', KEYS[2], old[i], old[i + 1]); end; "
+                    + "redis.call('persist', KEYS[2]); return 1;", Long.class);
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
 
@@ -50,6 +57,10 @@ public class RedisMarketSnapshotRepository {
     }
 
     public void replace(MarketDataConfig.SnapshotSource source, List<Quote> quotes) {
+        replace(Market.A_SHARE, source, quotes);
+    }
+
+    public void replace(Market market, MarketDataConfig.SnapshotSource source, List<Quote> quotes) {
         if (quotes == null || quotes.isEmpty()) {
             throw new IllegalArgumentException("全市场快照不能为空");
         }
@@ -69,11 +80,11 @@ public class RedisMarketSnapshotRepository {
                 arguments.add(field);
                 arguments.add(value);
             });
-            String temporary = dataKey(source) + ":tmp:" + UUID.randomUUID();
+            String temporary = dataKey(market, source) + ":tmp:" + UUID.randomUUID();
             try {
-                redis.execute(UPDATE_SNAPSHOT, List.of(dataKey(source), temporary),
+                redis.execute(UPDATE_SNAPSHOT, List.of(dataKey(market, source), temporary),
                         arguments.toArray());
-                redis.delete(metaKey(source));
+                if (market == Market.A_SHARE) redis.delete(metaKey(source));
             } catch (RuntimeException exception) {
                 redis.delete(temporary);
                 throw exception;
@@ -85,13 +96,18 @@ public class RedisMarketSnapshotRepository {
 
     public List<Quote> find(MarketDataConfig.SnapshotSource source,
             List<InstrumentId> instruments) {
-        if (metadata(source).isEmpty()) {
+        return find(Market.A_SHARE, source,
+                instruments.stream().map(InstrumentId::canonical).toList());
+    }
+
+    public List<Quote> find(Market market, MarketDataConfig.SnapshotSource source,
+            List<String> instrumentIds) {
+        if (metadata(market, source).isEmpty()) {
             throw new IllegalStateException("Redis 行情快照尚未就绪");
         }
-        List<Object> fields = instruments.stream().map(InstrumentId::canonical)
-                .map(value -> (Object) value).toList();
-        List<Object> raw = redis.opsForHash().multiGet(dataKey(source), fields);
-        if (raw == null || raw.size() != instruments.size()) {
+        List<Object> fields = instrumentIds.stream().map(value -> (Object) value).toList();
+        List<Object> raw = redis.opsForHash().multiGet(dataKey(market, source), fields);
+        if (raw == null || raw.size() != instrumentIds.size()) {
             throw new IllegalStateException("Redis 行情快照尚未就绪");
         }
         List<Quote> result = new ArrayList<>();
@@ -108,8 +124,13 @@ public class RedisMarketSnapshotRepository {
 
     public List<QuoteProviderSearchView> search(MarketDataConfig.SnapshotSource source,
             String query, int limit) {
+        return search(Market.A_SHARE, source, query, limit);
+    }
+
+    public List<QuoteProviderSearchView> search(Market market,
+            MarketDataConfig.SnapshotSource source, String query, int limit) {
         String keyword = query == null ? "" : query.strip().toUpperCase(Locale.ROOT);
-        Map<Object, Object> entries = redis.opsForHash().entries(dataKey(source));
+        Map<Object, Object> entries = redis.opsForHash().entries(dataKey(market, source));
         List<QuoteProviderSearchView> result = new ArrayList<>();
         for (Map.Entry<Object, Object> entry : entries.entrySet()) {
             if (METADATA_FIELD.equals(entry.getKey().toString())) continue;
@@ -129,10 +150,15 @@ public class RedisMarketSnapshotRepository {
     }
 
     public Optional<SnapshotMetadata> metadata(MarketDataConfig.SnapshotSource source) {
-        String raw = (String) redis.opsForHash().get(dataKey(source), METADATA_FIELD);
-        if (raw == null) raw = migrateLegacyMetadata(source);
+        return metadata(Market.A_SHARE, source);
+    }
+
+    public Optional<SnapshotMetadata> metadata(Market market,
+            MarketDataConfig.SnapshotSource source) {
+        String raw = (String) redis.opsForHash().get(dataKey(market, source), METADATA_FIELD);
+        if (raw == null && market == Market.A_SHARE) raw = migrateLegacyMetadata(source);
         if (raw == null) return Optional.empty();
-        redis.persist(dataKey(source));
+        redis.persist(dataKey(market, source));
         try {
             return Optional.of(objectMapper.readValue(raw, SnapshotMetadata.class));
         } catch (JsonProcessingException exception) {
@@ -144,7 +170,9 @@ public class RedisMarketSnapshotRepository {
     public void migrateLegacySnapshots() {
         for (MarketDataConfig.SnapshotSource source : MarketDataConfig.SnapshotSource.values()) {
             try {
-                metadata(source);
+                redis.execute(COPY_LEGACY_MARKET_KEY,
+                        List.of(legacyDataKey(source), dataKey(Market.A_SHARE, source)));
+                metadata(Market.A_SHARE, source);
             } catch (RuntimeException exception) {
                 log.warn("Redis 旧快照 TTL 迁移暂未完成：source={},error={}",
                         source, exception.getClass().getSimpleName());
@@ -157,14 +185,14 @@ public class RedisMarketSnapshotRepository {
         if (legacy == null) legacy = rebuildMetadataFromQuotes(source);
         if (legacy == null) return null;
         Long migrated = redis.execute(MIGRATE_LEGACY_SNAPSHOT,
-                List.of(dataKey(source), metaKey(source)), legacy);
+                List.of(dataKey(Market.A_SHARE, source), metaKey(source)), legacy);
         if (migrated == null || migrated == 0) return null;
-        Object current = redis.opsForHash().get(dataKey(source), METADATA_FIELD);
+        Object current = redis.opsForHash().get(dataKey(Market.A_SHARE, source), METADATA_FIELD);
         return current == null ? null : current.toString();
     }
 
     private String rebuildMetadataFromQuotes(MarketDataConfig.SnapshotSource source) {
-        Map<Object, Object> entries = redis.opsForHash().entries(dataKey(source));
+        Map<Object, Object> entries = redis.opsForHash().entries(dataKey(Market.A_SHARE, source));
         Instant latest = null;
         int count = 0;
         for (Map.Entry<Object, Object> entry : entries.entrySet()) {
@@ -190,16 +218,26 @@ public class RedisMarketSnapshotRepository {
 
     public Optional<String> acquireRefreshLock(MarketDataConfig.SnapshotSource source,
             int refreshSeconds) {
+        return acquireRefreshLock(Market.A_SHARE, source, refreshSeconds);
+    }
+
+    public Optional<String> acquireRefreshLock(Market market,
+            MarketDataConfig.SnapshotSource source, int refreshSeconds) {
         String token = UUID.randomUUID().toString();
         Boolean acquired = redis.opsForValue().setIfAbsent(
-                refreshLockKey(source), token,
+                refreshLockKey(market, source), token,
                 // 覆盖慢请求和多实例时钟偏差，避免一次刷新未结束时另一实例重复抓取。
                 Duration.ofSeconds(Math.max(60, refreshSeconds * 2L)));
         return Boolean.TRUE.equals(acquired) ? Optional.of(token) : Optional.empty();
     }
 
     public void releaseRefreshLock(MarketDataConfig.SnapshotSource source, String token) {
-        redis.execute(RELEASE_LOCK, List.of(refreshLockKey(source)), token);
+        releaseRefreshLock(Market.A_SHARE, source, token);
+    }
+
+    public void releaseRefreshLock(Market market, MarketDataConfig.SnapshotSource source,
+            String token) {
+        redis.execute(RELEASE_LOCK, List.of(refreshLockKey(market, source)), token);
     }
 
     public boolean ping() {
@@ -209,16 +247,21 @@ public class RedisMarketSnapshotRepository {
         }
     }
 
-    private String dataKey(MarketDataConfig.SnapshotSource source) {
-        return PREFIX + source.name().toLowerCase(Locale.ROOT);
+    private String dataKey(Market market, MarketDataConfig.SnapshotSource source) {
+        return PREFIX + market.name().toLowerCase(Locale.ROOT) + ":snapshot:"
+                + source.name().toLowerCase(Locale.ROOT);
+    }
+
+    private String legacyDataKey(MarketDataConfig.SnapshotSource source) {
+        return LEGACY_PREFIX + source.name().toLowerCase(Locale.ROOT);
     }
 
     private String metaKey(MarketDataConfig.SnapshotSource source) {
-        return dataKey(source) + ":meta";
+        return legacyDataKey(source) + ":meta";
     }
 
-    private String refreshLockKey(MarketDataConfig.SnapshotSource source) {
-        return dataKey(source) + ":refresh-lock";
+    private String refreshLockKey(Market market, MarketDataConfig.SnapshotSource source) {
+        return dataKey(market, source) + ":refresh-lock";
     }
 
     public record SnapshotMetadata(String source, Instant fetchedAt, int quoteCount) {}

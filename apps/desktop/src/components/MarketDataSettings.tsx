@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Database, Gauge, RadioTower, Save } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import {
   saveMarketPreferences,
@@ -9,7 +9,6 @@ import {
   type MarketMode,
   type MarketPreferences,
   type SingleSource,
-  type SnapshotSource,
 } from "../lib/marketPreferences";
 import type { MarketDataConfig } from "../types";
 import { MarketStatusLights } from "./MarketStatusLights";
@@ -24,32 +23,32 @@ export function MarketDataSettings({ isAdmin, onBack }: { isAdmin: boolean; onBa
   const [message, setMessage] = useState("");
   const savedPreferences = useMarketPreferences(
     config.data?.mode ?? "MARKET_SNAPSHOT",
-    config.data?.snapshotSource ?? "EASTMONEY",
+    config.data?.snapshotSource ?? "SINA",
     config.data?.singleSource ?? "EASTMONEY",
   );
   const [clientForm, setClientForm] = useState<MarketPreferences>(savedPreferences);
+  const clientFormDirty = useRef(false);
   useEffect(() => {
     if (config.data) setForm({
       provider: config.data.provider,
       mode: config.data.mode,
-      snapshotSource: config.data.snapshotSource,
+      snapshotSource: "SINA",
       singleSource: config.data.singleSource,
       refreshSeconds: config.data.refreshSeconds,
     });
   }, [config.data]);
-  useEffect(() => setClientForm(savedPreferences), [savedPreferences]);
+  useEffect(() => {
+    if (!clientFormDirty.current) setClientForm(savedPreferences);
+  }, [savedPreferences]);
 
   function selectMode(mode: MarketMode) {
+    clientFormDirty.current = true;
     setClientForm({ ...clientForm, mode });
     if (isAdmin && form) setForm({ ...form, mode });
   }
 
-  function selectSnapshotSource(source: SnapshotSource) {
-    setClientForm({ ...clientForm, snapshotSource: source });
-    if (isAdmin && form) setForm({ ...form, snapshotSource: source });
-  }
-
   function selectSingleSource(source: SingleSource) {
+    clientFormDirty.current = true;
     setClientForm({ ...clientForm, singleSource: source });
     if (isAdmin && form) setForm({ ...form, singleSource: source });
   }
@@ -64,6 +63,7 @@ export function MarketDataSettings({ isAdmin, onBack }: { isAdmin: boolean; onBa
         await config.refetch();
       }
       saveMarketPreferences(clientForm);
+      clientFormDirty.current = false;
       setMessage("配置已生效");
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "保存失败");
@@ -102,22 +102,18 @@ export function MarketDataSettings({ isAdmin, onBack }: { isAdmin: boolean; onBa
             </button>
           </div>
           {clientForm.mode === "MARKET_SNAPSHOT" ? <div className="source-form-section">
-            <div><h3>本机全市场读取来源</h3><p>服务端并行维护两份快照，本设置只决定当前客户端读取哪份 Redis 缓存。</p></div>
+            <div><h3>全市场行情来源</h3><p>服务端统一维护新浪快照，交易时段按管理员设置的频率刷新。</p></div>
             <div className="source-options">
-              <label><input type="radio" name="snapshot-source" value="EASTMONEY"
-                checked={clientForm.snapshotSource === "EASTMONEY"}
-                onChange={() => selectSnapshotSource("EASTMONEY")} />
-                <span><strong>东方财富</strong><small>stock_zh_a_spot_em</small></span></label>
-              <label><input type="radio" name="snapshot-source" value="SINA"
-                checked={clientForm.snapshotSource === "SINA"}
-                onChange={() => selectSnapshotSource("SINA")} />
-                <span><strong>新浪财经</strong><small>stock_zh_a_spot · 最小 30 秒</small></span></label>
+              <div className="source-option-static" aria-label="新浪财经全市场行情">
+                <RadioTower size={18} />
+                <span><strong>新浪财经</strong><small>A股、港股全市场快照；美股按持仓查询</small></span>
+              </div>
             </div>
             <label className="refresh-field">服务端快照刷新频率（秒）
               <input type="number" min={30} max={300}
                 disabled={!isAdmin} value={form.refreshSeconds}
                 onChange={(event) => setForm({ ...form, refreshSeconds: Number(event.target.value) })} />
-              <small>两来源共用 · 仅管理员可改 · 交易时段执行</small></label>
+              <small>仅管理员可改 · 各市场交易时段执行</small></label>
           </div> : <div className="source-form-section">
             <div><h3>本机单只股票来源</h3><p>当前客户端按所选来源请求；桌面端不直连 AKShare，由 Java API 统一鉴权、限流和格式转换。</p></div>
             <div className="source-options">
@@ -136,7 +132,10 @@ export function MarketDataSettings({ isAdmin, onBack }: { isAdmin: boolean; onBa
               <div className="frequency-options">{SINGLE_REFRESH_OPTIONS.map((seconds) =>
                 <button type="button" key={seconds}
                   className={clientForm.singleRefreshSeconds === seconds ? "selected" : ""}
-                  onClick={() => setClientForm({ ...clientForm, singleRefreshSeconds: seconds })}>
+                  onClick={() => {
+                    clientFormDirty.current = true;
+                    setClientForm({ ...clientForm, singleRefreshSeconds: seconds });
+                  }}>
                   {seconds} 秒
                 </button>)}</div>
             </div>

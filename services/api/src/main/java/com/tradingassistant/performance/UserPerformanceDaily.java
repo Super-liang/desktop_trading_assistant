@@ -48,6 +48,21 @@ public class UserPerformanceDaily {
         this.calculatedAt = at;
     }
 
+    /** 0.1.6 起仅保留旧端点的日收益兼容数据，不再生产年度或年化指标。 */
+    public void updateLegacyDaily(PerformanceCalculator.IntradayResult day,
+            String source, Instant at) {
+        this.dailyProfit = day.dailyProfit();
+        this.dailyReturnPercent = day.dailyReturnPercent();
+        this.yearProfit = null;
+        this.yearReturnPercent = null;
+        this.annualizedReturnPercent = null;
+        this.statisticsStartDate = null;
+        this.status = day.status();
+        this.missingQuoteCount = day.missingQuoteCount();
+        this.quoteSource = source;
+        this.calculatedAt = at;
+    }
+
     public Id getId() { return id; }
     public BigDecimal getDailyProfit() { return dailyProfit; }
     public BigDecimal getDailyReturnPercent() { return dailyReturnPercent; }
