@@ -1,8 +1,8 @@
 # 📈 股票盯盘助手
 
-> 仅面向中国A股个人投资者的 Windows / macOS 桌面盯盘应用：实时行情、个人收益、透明置顶小窗、多行情源与老板键，一处完成。
+> 面向个人投资者的 Windows / macOS 桌面盯盘应用：A 股、港股、美股与开放式公募基金持仓，三地交易日历、个人收益、透明置顶小窗与老板键，一处完成。
 
-[![Release](https://img.shields.io/badge/release-v0.1.5-1677ff)](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.5)
+[![Release](https://img.shields.io/badge/release-v0.1.6-1677ff)](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.6)
 [![CI](https://github.com/Super-liang/desktop_trading_assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Super-liang/desktop_trading_assistant/actions/workflows/ci.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-5c6ac4)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
@@ -10,7 +10,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-当前版本：**v0.1.5** · [下载 Windows / macOS 安装包](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.5)
+当前版本：**v0.1.6** · [下载 Windows / macOS 安装包](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.6)
 
 > [!WARNING]
 > 项目当前通过 AKShare 对公开网站行情进行研究验证，数据可能延迟、限流或临时不可用，不构成任何投资建议，也不具备 ToC 商业行情展示与分发授权。正式商用前必须替换为合同明确授权的行情供应商。
@@ -35,10 +35,10 @@
 | --- | --- |
 | 上班时不方便打开完整行情软件 | 透明、无边框、置顶小窗，只展示需要的文字行情 |
 | 老板靠近需要快速隐藏 | 全局快捷键 `Cmd/Ctrl + Shift + H` 一键隐藏或恢复全部窗口 |
-| 只关心自己的持仓 | 手动录入股票、数量与成本，实时计算市值和浮动盈亏 |
-| 公开行情源偶尔不稳定 | 新浪/东财全市场快照独立缓存；单股模式可切换东财/雪球并显示联通状态 |
+| 只关心自己的持仓 | 按 A 股、港股、美股和公募基金管理持仓，按原币种计算日收益与持有收益 |
+| 公开行情源偶尔不稳定 | 股票行情使用新浪共享快照并永久保留最后成功数据；单股模式可切换东财/雪球 |
 | 希望掌控刷新节奏 | 全市场频率由管理员统一控制；单股查询由用户选择 2/5/10/20 秒 |
-| 希望了解自己的阶段收益 | 首页集中展示日收益和年化收益，可在金额与比率之间切换 |
+| 希望了解自己的阶段收益 | 首页按市场和币种展示日收益、持有收益，可在金额与比率之间切换 |
 | 不想把券商密码交给第三方 | 不连接券商、不执行交易、不采集交易账号和密码 |
 
 ## 核心功能
@@ -54,19 +54,21 @@
 
 ### 自选与持仓
 
-- ✅ A 股代码/名称搜索，自选添加与编辑
-- ✅ 手动设置持仓数量和成本价，支持小数成本
-- ✅ 实时展示现价、市值、浮动盈亏和收益率
-- ✅ 首页展示个人日收益和年化收益，支持金额/比率切换
-- ✅ “我的持仓”独立页面，新增持仓后自动进入持仓列表
-- ✅ 每日 08:00 从 AKShare 更新 A 股代码与名称到 PostgreSQL
-- ✅ 非交易时段继续展示最后一次成功快照
+- ✅ A 股、港股、美股与开放式公募基金的市场隔离搜索、添加和编辑
+- ✅ 手动设置持仓数量、成本价与建仓日期；重复添加可确认累加并自动计算加权成本
+- ✅ “我的持仓”固定展示四个市场子菜单，无持仓市场也保留入口和独立空状态
+- ✅ 股票展示行情、市值、日收益和持有收益；基金展示单位净值、净值日期和持有收益
+- ✅ 首页按市场和 CNY/HKD/USD 分组展示日收益、持有收益，禁止无汇率依据的跨币种合计
+- ✅ 三地交易日历驱动市场状态、行情刷新和开盘前证券目录同步
+- ✅ 首页横向浏览上证指数、深证成指、创业板指、北证 50、科创综指、科创 50、沪深 300
+- ✅ 非交易时段或上游异常时继续展示最后一次成功快照
 
 ### 账号与后台
 
 - ✅ 用户注册、登录、刷新令牌轮换与安全退出
 - ✅ JWT + BCrypt + RBAC 权限控制
 - ✅ 登录后修改密码，成功后撤销旧刷新令牌并重新登录
+- ✅ “我的”页面集中管理修改密码、退出登录、退出全部设备和注销账号
 - ✅ 管理员按用户查看最后登录时间、持仓证券清单和参考收益
 - ✅ 管理员按用户、动作和时间范围分页查询关键操作审计
 - ✅ 管理端不返回持仓数量、成本、总市值等隐私字段
@@ -76,11 +78,13 @@
 ### 行情链路
 
 - ✅ AKShare FastAPI 独立网关，桌面端不直接访问公开行情接口
-- ✅ 全市场新浪、东方财富双源并行刷新和独立健康状态
-- ✅ Redis 按来源永久保存最后成功快照，刷新只更新对应来源
+- ✅ A 股、港股使用新浪全市场共享快照；美股按持仓集合使用新浪批量行情
+- ✅ Redis 按市场、能力和来源隔离，永久保存最后成功快照且不设置主动 TTL
+- ✅ 三地交易日历区分预开盘、交易中、午休、收盘、节假日和日历未知状态
+- ✅ 开放式公募基金每天 07:00 同步最新已披露单位净值，不伪装成股票实时行情
 - ✅ 单股东方财富、雪球按请求查询；Redis 按来源永久保留最后成功行情
 - ✅ 单股刷新失败时回退到最后行情并标记过期，刷新间隔内不再闪空
-- ✅ 首页展示 Spring API、AKShare、Redis 和具体上游联通灯
+- ✅ 首页右上角“联通检测”折叠展示 Spring API、AKShare、Redis、日历与市场来源状态
 - ✅ `QuoteProvider` SPI 可继续接入有授权的生产行情源
 
 ## 行情模式
@@ -89,24 +93,26 @@
 
 | 模式 | 可选来源 | 刷新机制 | 适用场景 |
 | --- | --- | --- | --- |
-| 全市场快照 | 东方财富 / 新浪 | 服务端在 A 股交易时段并行刷新并写入两份 Redis；管理员配置统一频率，范围 30–300 秒 | 自选较多、希望所有用户共享一次抓取 |
+| 全市场快照 | 新浪 | 服务端按 A 股/港股交易日历刷新共享 Redis；管理员配置统一频率，非交易时段保留最后快照 | 自选较多、希望所有用户共享一次抓取 |
 | 单只股票 | 东方财富 / 雪球 | 客户端按 2/5/10/20 秒轮询，默认 10 秒；服务端按用户选择请求，成功后更新来源隔离的永久缓存 | 自选较少、希望降低单只股票延迟 |
+| 美股持仓行情 | 新浪 | 服务端在美股常规交易时段按持仓集合批量刷新；不抓取盘前盘后 | 美股持仓展示，公开源行情可能延迟 |
+| 开放式公募基金 | AKShare 单位净值 | 每天北京时间 07:00 同步最新和前一有效净值，按净值日期幂等更新 | 非实时基金净值与收益展示 |
 
 <!-- markdownlint-enable MD013 -->
 
-普通用户可以自由切换工作模式、全市场读取来源、单股来源和单股查询频率。这些选择保存在当前设备，不会修改其他用户的选择；管理员配置作为客户端首次使用时的默认值。
+普通用户可以自由切换 A 股全市场/单股模式、单股来源和单股查询频率。这些选择保存在当前设备，不会修改其他用户的选择；管理员配置服务端共享快照频率。港股、美股和基金只展示其真实支持的服务端能力，不伪装成 A 股单股模式。
 
 ## 快速开始
 
 ### 方式一：直接下载安装包
 
-前往 [GitHub Release v0.1.5](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.5)：
+前往 [GitHub Release v0.1.6](https://github.com/Super-liang/desktop_trading_assistant/releases/tag/v0.1.6)：
 
 | 系统 | 下载文件 |
 | --- | --- |
-| macOS Apple Silicon | `StockTradingAssistant_0.1.5_macos-arm64.dmg` |
-| macOS APP 压缩包 | `StockTradingAssistant_0.1.5_macos-arm64.app.zip` |
-| Windows x64 | `StockTradingAssistant_0.1.5_windows-x64-setup.exe` |
+| macOS Apple Silicon | `StockTradingAssistant_0.1.6_macos-arm64.dmg` |
+| macOS APP 压缩包 | `StockTradingAssistant_0.1.6_macos-arm64.app.zip` |
+| Windows x64 | `StockTradingAssistant_0.1.6_windows-x64-setup.exe` |
 
 Release 同时提供两个平台的 `SHA256SUMS.txt`。建议下载后先校验文件完整性。
 
@@ -296,8 +302,8 @@ container stop trading-redis
 | Vite / Tauri WebView | 1420 | 桌面前端开发 |
 | Spring API | 8080 | 鉴权、持仓、行情聚合与管理后台 |
 | AKShare 网关 | 8090 | 公开行情适配与格式归一化 |
-| PostgreSQL | 5432 | 用户、持仓、收益、操作审计、行情配置和 A 股代码目录 |
-| Redis | 6379 | 双来源全市场快照、单股最后行情与刷新锁 |
+| PostgreSQL | 5432 | 用户、跨市场持仓、交易日历、收益基线、审计和证券目录 |
+| Redis | 6379 | 分市场共享快照、指数行情、单股最后行情与刷新锁 |
 
 ## 系统架构
 
@@ -305,10 +311,10 @@ container stop trading-redis
 flowchart LR
     Desktop["Tauri 桌面端<br/>主窗口 / 透明小窗"]
     API["Spring Boot API<br/>JWT / RBAC / 收益 / 审计 / 行情路由"]
-    PG[("PostgreSQL<br/>用户 / 持仓 / 收益 / 审计 / 证券目录")]
-    Redis[("Redis<br/>全市场快照 / 单股最后行情")]
+    PG[("PostgreSQL<br/>用户 / 跨市场持仓 / 日历 / 收益基线 / 证券目录")]
+    Redis[("Redis<br/>分市场快照 / 指数 / 单股最后行情")]
     Gateway["FastAPI + AKShare<br/>来源隔离 / 请求合并 / 失败回退"]
-    Sources["公开行情上游<br/>新浪 / 东财 / 雪球"]
+    Sources["公开行情上游<br/>新浪 / 东财 / 雪球 / 基金净值"]
 
     Desktop -->|HTTPS / JSON| API
     API --> PG
@@ -320,7 +326,7 @@ flowchart LR
 核心原则：
 
 - 桌面端只访问 Spring API，不直接访问 AKShare 或公开网站。
-- 全市场模式由服务端统一抓取，所有用户共享 Redis 快照。
+- 股票共享快照由服务端按交易日历统一抓取，所有用户共享 Redis 最后成功数据。
 - 单股模式由客户端轮询触发，不为每个用户创建服务端定时任务。
 - 单股成功行情按来源与证券代码永久缓存；上游失败时继续返回最后行情。
 - 请求级模式和来源通过不可变参数传递，不修改全局配置，避免并发用户互相污染。
@@ -366,7 +372,7 @@ Windows 正式安装包由
 
 ## 云端部署
 
-当前模拟环境已部署 **v0.1.5**，采用 OpenCloudOS 9.6 单机拓扑：
+当前云端环境已部署 **v0.1.6 Web/API**，采用 OpenCloudOS 9.6 单机拓扑：
 
 ```text
 Internet
@@ -385,6 +391,7 @@ Nginx :443
 切换、systemd 健康检查和失败回滚。
 
 - [OpenCloudOS 云端部署手册](docs/cloud-deployment-opencloudos.md)
+- [0.1.6 行情依赖与延迟说明](docs/market-data-dependencies.md)
 - [0.1.4 发布记录](docs/release-0.1.4-record-2026-07-23.md)
 - [0.1.3 发布记录](docs/release-0.1.3-record-2026-07-22.md)
 - [桌面安装包构建与发布](docs/desktop-installers.md)
@@ -412,7 +419,7 @@ desktop_trading_assistant/
 
 | 阶段 | 状态 | 内容 |
 | --- | --- | --- |
-| 一期 | ✅ 已实现 | 跨平台桌面端、账号体系、个人收益、独立持仓页、透明小窗、老板键、多行情模式、管理员审计后台 |
+| 一期 | ✅ 已实现 | 跨平台桌面端、四类持仓、三地交易日历、日收益/持有收益、透明小窗、老板键、账号中心和管理员审计后台 |
 | 二期 | 🧭 规划中 | 用户个性化、云端偏好同步、高级功能、会员管理 |
 | 三期 | 💡 规划中 | AI 诊股、可解释分析、风险提示；荐股能力需单独完成合规与责任边界评估 |
 
@@ -421,10 +428,10 @@ desktop_trading_assistant/
 ## 安全与合规边界
 
 - 本项目不接券商交易、不保存券商账号或交易密码，也不会自动下单。
-- 盈亏计算不包含手续费、印花税、分红、送转和除权等复杂因素。
+- 日收益使用开盘持仓数量与开盘价基线，持有收益使用成本和当前价；均不包含手续费、税费、分红、送转和除权等复杂因素。
 - AKShare 和公开网站接口仅用于开发、学习与非商业研究，稳定性和实时性没有 SLA。
 - ToC 商用必须购买覆盖目标交易所、PC/桌面展示、目标地域、终端用户分发、服务端缓存及衍生计算的行情许可。
-- 单股东方财富接口不支持北交所时会明确返回无行情，不会偷偷切换到其他来源。
+- 港股、美股公开行情可能存在约 15 分钟或更长延迟；公募基金收益按最新已披露净值计算，不是实时行情。
 - 本机行情偏好当前按设备存储，同一台电脑切换账号可能继承上一账号的模式和频率；账号级同步属于二期范围。
 - 当前 macOS 包未 Apple notarization，Windows 包未使用商业代码签名证书，仅个人学习研究使用。
 
